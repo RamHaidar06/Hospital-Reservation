@@ -1,0 +1,425 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #0a0e27 0%, #0f1535 50%, #0d1f35 100%);
+  color: #e4e7eb;
+  overflow-x: hidden;
+}
+
+:root {
+  --cyan-bright: #00d9ff;
+  --cyan-dark: #0891b2;
+  --teal-accent: #06b6d4;
+  --navy-bg: #0a0e27;
+  --navy-surface: #1a2851;
+  --text-primary: #e4e7eb;
+  --text-secondary: #9ca3af;
+}
+
+.glass {
+  background: rgba(26, 40, 81, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 217, 255, 0.15);
+  border-radius: 20px;
+}
+
+.glass-card {
+  background: rgba(26, 40, 81, 0.8);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(0, 217, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+h1 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: #ffffff;
+}
+
+h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 217, 255, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(0, 217, 255, 0.4); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+.animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
+.animate-slide-in-left { animation: slideInLeft 0.8s ease-out forwards; }
+.animate-slide-in-right { animation: slideInRight 0.8s ease-out forwards; }
+.animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
+.animate-glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
+.animate-float { animation: float 4s ease-in-out infinite; }
+
+.animation-delay-1 { animation-delay: 0.1s; }
+.animation-delay-2 { animation-delay: 0.2s; }
+.animation-delay-3 { animation-delay: 0.3s; }
+.animation-delay-4 { animation-delay: 0.4s; }
+.animation-delay-5 { animation-delay: 0.5s; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--cyan-bright) 0%, var(--teal-accent) 100%);
+  color: #0a0e27;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 0 40px rgba(0, 217, 255, 0.6);
+}
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--cyan-bright);
+  padding: 12px 28px;
+  border-radius: 12px;
+  font-weight: 600;
+  border: 2px solid var(--cyan-bright);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 217, 255, 0.1);
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+}
+.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  padding: 12px 28px;
+  border-radius: 12px;
+  font-weight: 600;
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.input-field {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: rgba(26, 40, 81, 0.4);
+  border: 1.5px solid rgba(0, 217, 255, 0.2);
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  color: white;
+  transition: all 0.3s ease;
+}
+.input-field::placeholder { color: var(--text-secondary); }
+.input-field:focus {
+  outline: none;
+  background: rgba(26, 40, 81, 0.6);
+  border-color: var(--cyan-bright);
+  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.15);
+}
+
+.tab-switch {
+  display: flex;
+  gap: 8px;
+  background: rgba(26, 40, 81, 0.5);
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 217, 255, 0.1);
+  margin-bottom: 32px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+  font-size: 0.95rem;
+}
+.tab-btn.active {
+  background: rgba(0, 217, 255, 0.2);
+  color: var(--cyan-bright);
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.2);
+}
+
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  opacity: 0.4;
+  filter: blur(80px);
+}
+.glow-orb-1 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(0, 217, 255, 0.3), transparent);
+  top: -200px;
+  right: -100px;
+}
+.glow-orb-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.2), transparent);
+  bottom: -150px;
+  left: -100px;
+}
+.glow-orb-3 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(0, 217, 255, 0.15), transparent);
+  top: 50%;
+  right: 5%;
+}
+
+.feature-card { transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1); }
+.feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 0 30px rgba(0, 217, 255, 0.2);
+  border-color: rgba(0, 217, 255, 0.3);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+}
+.modal-overlay.show { display: flex; }
+
+.status-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-available {
+  background: rgba(0, 217, 255, 0.15);
+  color: var(--cyan-bright);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+}
+
+.status-busy {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.status-booked {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.checkbox-custom {
+  accent-color: var(--cyan-bright);
+}
+
+nav {
+  backdrop-filter: blur(15px);
+  border-bottom: 1px solid rgba(0, 217, 255, 0.1);
+  background: rgba(10, 14, 39, 0.7);
+}
+
+/* =========================
+   FUTURISTIC UPGRADE PATCH (SAFE)
+   paste at END of index.css
+   ========================= */
+
+/* Create a proper stacking context so background layers can't steal clicks */
+body{
+  position: relative;
+  isolation: isolate; /* prevents pseudo-elements/fixed layers from blocking UI */
+}
+
+/* Better background depth + subtle grid (always behind UI) */
+body::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1; /* IMPORTANT: behind everything */
+  background:
+    radial-gradient(1200px 800px at 20% 10%, rgba(0,217,255,.10), transparent 50%),
+    radial-gradient(900px 700px at 80% 30%, rgba(6,182,212,.10), transparent 55%),
+    radial-gradient(900px 700px at 50% 90%, rgba(99,102,241,.10), transparent 60%),
+    linear-gradient(135deg, rgba(255,255,255,.04) 1px, transparent 1px),
+    linear-gradient(45deg, rgba(255,255,255,.02) 1px, transparent 1px);
+  background-size:
+    auto, auto, auto,
+    70px 70px,
+    90px 90px;
+  mix-blend-mode: screen;
+  opacity: .9;
+}
+
+/* Make glow orbs fixed so they feel like ambient lighting (and never block clicks) */
+.glow-orb{
+  position: fixed !important;
+  z-index: -1;          /* IMPORTANT: behind UI */
+  pointer-events: none; /* IMPORTANT: never capture clicks */
+  animation: orbDrift 10s ease-in-out infinite;
+}
+
+@keyframes orbDrift{
+  0%,100%{ transform: translateY(0) translateX(0) scale(1); }
+  50%{ transform: translateY(-14px) translateX(10px) scale(1.02); }
+}
+
+/* Ensure your real UI sits above background layers */
+nav, section, main, header, .glass, .glass-card, .tab-switch{
+  position: relative;
+  z-index: 1;
+}
+
+/* Stronger “glass” with neon rim */
+.glass, .glass-card{
+  border: 1px solid rgba(0,217,255,.16);
+  box-shadow:
+    0 10px 40px rgba(0,0,0,.45),
+    0 0 0 1px rgba(255,255,255,.03) inset,
+    0 0 22px rgba(0,217,255,.08);
+}
+
+.glass-card{
+  background: linear-gradient(180deg, rgba(26,40,81,.75), rgba(10,14,39,.55));
+}
+
+/* Hover glow for cards */
+.glass-card:hover{
+  border-color: rgba(0,217,255,.28);
+  box-shadow:
+    0 16px 60px rgba(0,0,0,.55),
+    0 0 0 1px rgba(255,255,255,.04) inset,
+    0 0 28px rgba(0,217,255,.14);
+  transform: translateY(-2px);
+  transition: all .25s ease;
+}
+
+/* Buttons: add “neon edge” and click feel */
+.btn-primary{
+  box-shadow:
+    0 0 22px rgba(0,217,255,.35),
+    0 0 0 1px rgba(255,255,255,.06) inset;
+}
+.btn-primary:active{ transform: translateY(0); filter: brightness(.95); }
+
+.btn-secondary{
+  box-shadow: 0 0 0 1px rgba(0,217,255,.10) inset;
+}
+.btn-secondary:hover{
+  border-color: rgba(0,217,255,.90);
+  box-shadow:
+    0 0 22px rgba(0,217,255,.22),
+    0 0 0 1px rgba(255,255,255,.05) inset;
+}
+
+/* Inputs: slightly more premium */
+.input-field{
+  background: rgba(10,14,39,.40);
+  border-color: rgba(0,217,255,.18);
+}
+.input-field:focus{
+  box-shadow:
+    0 0 0 3px rgba(0,217,255,.16),
+    0 0 26px rgba(0,217,255,.14);
+}
+
+/* Tabs: add hover + active neon rim */
+.tab-btn:hover{
+  background: rgba(0,217,255,.08);
+  color: rgba(234,242,255,.90);
+}
+.tab-btn.active{
+  border: 1px solid rgba(0,217,255,.25);
+}
+
+/* Modal: stronger “frost” */
+.modal-overlay{
+  backdrop-filter: blur(8px);
+}
+.modal-overlay .glass{
+  box-shadow:
+    0 24px 90px rgba(0,0,0,.65),
+    0 0 0 1px rgba(255,255,255,.05) inset,
+    0 0 40px rgba(0,217,255,.10);
+}
+
+/* Optional: selected time-slot styling (works if you add the class in HTML) */
+.slot-btn{
+  background: rgba(0,217,255,.10);
+  border: 1px solid rgba(0,217,255,.18);
+  color: white;
+}
+.slot-btn:hover{ border-color: rgba(0,217,255,.35); }
+.slot-btn.selected{
+  background: linear-gradient(135deg, rgba(0,217,255,.35), rgba(6,182,212,.25));
+  border-color: rgba(0,217,255,.55);
+  box-shadow: 0 0 26px rgba(0,217,255,.22);
+}
