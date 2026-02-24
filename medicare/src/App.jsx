@@ -861,7 +861,7 @@ try {
       <div className="glow-orb glow-orb-3" />
 
       {/* NAV */}
-      <nav className="sticky top-0 z-40">
+      {/* <nav className="sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
@@ -911,7 +911,7 @@ try {
             )}
           </div>
         </div>
-      </nav>
+      </nav> */}
 
       {/* LANDING */}
       {page === "landing" && (
