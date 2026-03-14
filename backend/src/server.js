@@ -22,3 +22,6 @@ app.use("/api/users", usersRoutes);
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 app.listen(process.env.PORT || 3000, () => console.log("Server running"));
+
+const reviewRoutes = require("./routes/reviewRoutes");
+app.use("/api", reviewRoutes);
