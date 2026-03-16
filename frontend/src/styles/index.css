@@ -246,8 +246,16 @@ h3 {
   justify-content: center;
   z-index: 50;
   padding: 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .modal-overlay.show { display: flex; }
+
+.doctor-detail-modal {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 
 .status-badge {
   display: inline-block;

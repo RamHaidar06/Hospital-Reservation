@@ -89,7 +89,12 @@ export default function useAppointmentActions({
           date
         )} at ${time}.`;
 
-      showMessage(confirmationMessage, "success");
+      if (created.emailStatus?.skipped) {
+        const reason = created.emailStatus.reason || "email delivery was skipped";
+        showMessage(`${confirmationMessage} (Email not sent: ${reason})`, "success");
+      } else {
+        showMessage(`${confirmationMessage} (Confirmation email sent)`, "success");
+      }
     } catch (err) {
       showMessage("✗ " + err.message, "error");
     }
@@ -97,12 +102,13 @@ export default function useAppointmentActions({
 
   async function cancelAppointment(apptId) {
     try {
+      let updated;
       try {
-        await apiFetch(`/appointments/${apptId}/cancel`, {
+        updated = await apiFetch(`/appointments/${apptId}/cancel`, {
           method: "PATCH",
         });
       } catch {
-        await apiFetch(`/appointments/${apptId}`, {
+        updated = await apiFetch(`/appointments/${apptId}`, {
           method: "PATCH",
           body: JSON.stringify({ status: "cancelled" }),
         });
@@ -115,7 +121,13 @@ export default function useAppointmentActions({
         ),
       }));
 
-      showMessage("✓ Appointment cancelled", "success");
+      const baseMessage = updated?.message || "✓ Appointment cancelled";
+      if (updated?.emailStatus?.skipped) {
+        const reason = updated.emailStatus.reason || "email delivery was skipped";
+        showMessage(`${baseMessage} (Email not sent: ${reason})`, "success");
+      } else {
+        showMessage(`${baseMessage} (Cancellation email sent)`, "success");
+      }
     } catch (err) {
       showMessage("✗ " + err.message, "error");
     }
@@ -129,8 +141,9 @@ export default function useAppointmentActions({
     if (!newTime) return;
 
     try {
+      let updated;
       try {
-        await apiFetch(`/appointments/${apptId}/reschedule`, {
+        updated = await apiFetch(`/appointments/${apptId}/reschedule`, {
           method: "PATCH",
           body: JSON.stringify({
             appointmentDate: newDate,
@@ -138,7 +151,7 @@ export default function useAppointmentActions({
           }),
         });
       } catch {
-        await apiFetch(`/appointments/${apptId}`, {
+        updated = await apiFetch(`/appointments/${apptId}`, {
           method: "PATCH",
           body: JSON.stringify({
             appointmentDate: newDate,
@@ -156,7 +169,13 @@ export default function useAppointmentActions({
         ),
       }));
 
-      showMessage("✓ Appointment rescheduled!", "success");
+      const baseMessage = updated?.message || "✓ Appointment rescheduled!";
+      if (updated?.emailStatus?.skipped) {
+        const reason = updated.emailStatus.reason || "email delivery was skipped";
+        showMessage(`${baseMessage} (Email not sent: ${reason})`, "success");
+      } else {
+        showMessage(`${baseMessage} (Reschedule email sent)`, "success");
+      }
     } catch (err) {
       showMessage("✗ " + err.message, "error");
     }

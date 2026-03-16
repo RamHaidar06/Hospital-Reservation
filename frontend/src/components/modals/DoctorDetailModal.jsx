@@ -19,7 +19,7 @@ export default function DoctorDetailModal({
       onClick={closeDoctorDetails}
     >
       <div
-        className="glass-card"
+        className="glass-card doctor-detail-modal"
         style={{ maxWidth: 700, width: "100%", padding: 28 }}
         onClick={(e) => e.stopPropagation()}
       >
