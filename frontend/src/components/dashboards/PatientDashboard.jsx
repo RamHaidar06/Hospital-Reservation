@@ -240,7 +240,7 @@ export default function PatientDashboard({
                         openDoctorDetails(doc.id || doc._id);
                       }}
                     >
-                      Book Appointment
+                      View Profile & Book
                     </button>
                   </div>
                 ))}

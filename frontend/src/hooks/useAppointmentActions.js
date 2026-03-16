@@ -1,6 +1,20 @@
 import { apiFetch } from "../API/http";
 import { normalizeId } from "../utils/normalize";
 
+function formatAppointmentDate(date) {
+  if (!date) return "the selected date";
+
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+
+  return parsed.toLocaleDateString(undefined, {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function useAppointmentActions({
   currentPatient,
   selectedDoctor,
@@ -62,8 +76,20 @@ export default function useAppointmentActions({
       }));
 
       setDoctorDetailOpen(false);
+      setSelectedDoctorId(null);
+      setApptForm({ date: "", time: "", reason: "", notes: "" });
       setPatientTab("upcoming");
-      showMessage("✓ Appointment booked successfully!", "success");
+
+      const doctorLastName =
+        selectedDoctor.lastName || selectedDoctor.firstName || "the doctor";
+
+      const confirmationMessage =
+        created.message ||
+        `✓ Appointment confirmed with Dr. ${doctorLastName} on ${formatAppointmentDate(
+          date
+        )} at ${time}.`;
+
+      showMessage(confirmationMessage, "success");
     } catch (err) {
       showMessage("✗ " + err.message, "error");
     }
