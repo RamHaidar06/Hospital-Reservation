@@ -16,6 +16,7 @@ export default function DoctorDashboard({
   allData,
   doctorAppointments,
   isReviewsLoading = false,
+  isReviewsError = false,
   doctorReviews = [],
 }) {
   if (page !== "doctor" || !currentDoctor) return null;
@@ -198,6 +199,10 @@ export default function DoctorDashboard({
 
     {isReviewsLoading ? (
       <p style={{ color: "var(--text-secondary)" }}>Loading reviews...</p>
+    ) : isReviewsError ? (
+      <p style={{ color: "var(--text-secondary)" }}>
+        Could not load reviews. Please check your connection and refresh the page.
+      </p>
     ) : doctorReviews.length === 0 ? (
       <p style={{ color: "var(--text-secondary)" }}>No reviews available yet.</p>
     ) : (

@@ -25,6 +25,8 @@ export default function useAuthHandlers({
   setPatientAuthView,
   setPatientLogin,
   setDoctorLogin,
+  resetReviews,
+  fetchReviewsForUser,
   showMessage,
 }) {
   async function handlePatientLoginSubmit(e) {
@@ -55,6 +57,8 @@ export default function useAuthHandlers({
       setPatientTab("profile");
 
       showMessage("✓ Welcome back!", "success");
+
+      fetchReviewsForUser(user.id || user._id, "patient");
 
       try {
         const mine = await apiFetch("/appointments/mine");
@@ -163,6 +167,8 @@ export default function useAuthHandlers({
       setEndTimeDraft(user.endTime || "17:00");
 
       showMessage("✓ Welcome back, Doctor!", "success");
+
+      fetchReviewsForUser(user.id || user._id, "doctor");
 
       try {
         const mine = await apiFetch("/appointments/mine");
@@ -277,6 +283,7 @@ export default function useAuthHandlers({
   }
 
   function logoutPatient() {
+    resetReviews();
     setLoggedInPatient(null);
     setPage("landing");
     setPatientLogin({ email: "", password: "" });
@@ -285,6 +292,7 @@ export default function useAuthHandlers({
   }
 
   function logoutDoctor() {
+    resetReviews();
     setLoggedInDoctor(null);
     setPage("landing");
     setDoctorLogin({ email: "", password: "" });

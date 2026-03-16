@@ -122,11 +122,11 @@ export default function App() {
   const {
     reviews,
     setReviews,
-    isSessionRestoring,
     isReviewsLoading,
+    isReviewsError,
+    fetchReviewsForUser,
+    resetReviews,
   } = useSessionReviews({
-    currentDoctor,
-    currentPatient,
     setAllData,
     setLoggedInDoctor,
     setLoggedInPatient,
@@ -170,6 +170,8 @@ export default function App() {
     setPatientAuthView,
     setPatientLogin,
     setDoctorLogin,
+    resetReviews,
+    fetchReviewsForUser,
     showMessage,
   });
 
@@ -206,35 +208,10 @@ export default function App() {
     return generateTimeSlots(selectedDoctor).slice(0, 7);
   }, [selectedDoctor]);
 
-  const patientReviews = useMemo(() => {
-    if (!currentPatient) return [];
-
-    const patientId = currentPatient.id || currentPatient._id;
-
-    return reviews.filter((review) => {
-      const reviewPatientId =
-        typeof review.patient_id === "string"
-          ? review.patient_id
-          : review.patient_id?._id || review.patient_id?.id;
-
-      return String(reviewPatientId) === String(patientId);
-    });
-  }, [reviews, currentPatient]);
-
-  const doctorReviews = useMemo(() => {
-    if (!currentDoctor) return [];
-
-    const doctorId = currentDoctor.id || currentDoctor._id;
-
-    return reviews.filter((review) => {
-      const reviewDoctorId =
-        typeof review.doctor_id === "string"
-          ? review.doctor_id
-          : review.doctor_id?._id || review.doctor_id?.id;
-
-      return String(reviewDoctorId) === String(doctorId);
-    });
-  }, [reviews, currentDoctor]);
+  // The backend endpoints /reviews/doctor and /reviews/patient already scope
+  // results to the current user — no need to re-filter by ID on the frontend.
+  const doctorReviews = currentDoctor ? reviews : [];
+  const patientReviews = currentPatient ? reviews : [];
 
   const patientReviewsByAppointment = useMemo(() => {
     const map = new Map();
@@ -370,7 +347,8 @@ export default function App() {
         allData={allData}
         rescheduleAppointment={rescheduleAppointment}
         cancelAppointment={cancelAppointment}
-        isHistoryLoading={isSessionRestoring || isReviewsLoading}
+        isHistoryLoading={isReviewsLoading}
+        isHistoryError={isReviewsError}
         doctorReviews={Array.from(patientReviewsByAppointment.values())}
         submitReview={submitReview}
       />
@@ -392,7 +370,8 @@ export default function App() {
         doctorSlots={doctorSlots}
         allData={allData}
         doctorAppointments={doctorAppointments}
-        isReviewsLoading={isSessionRestoring || isReviewsLoading}
+        isReviewsLoading={isReviewsLoading}
+        isReviewsError={isReviewsError}
         doctorReviews={doctorReviews}
       />
 

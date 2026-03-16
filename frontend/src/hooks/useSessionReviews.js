@@ -1,10 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../API/http";
 import { normalizeArray, normalizeId } from "../utils/normalize";
 
+// Decode JWT payload locally (no network, no verification) to read the role.
+function getTokenRole(token) {
+  try {
+    const payload = JSON.parse(
+      atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
+    );
+    return payload.role || null;
+  } catch {
+    return null;
+  }
+}
+
+function toReviewsArray(data) {
+  return normalizeArray(Array.isArray(data) ? data : data?.reviews || []);
+}
+
 export default function useSessionReviews({
-  currentDoctor,
-  currentPatient,
   setAllData,
   setLoggedInDoctor,
   setLoggedInPatient,
@@ -16,51 +30,52 @@ export default function useSessionReviews({
   setEndTimeDraft,
 }) {
   const [reviews, setReviews] = useState([]);
-  const [isSessionRestoring, setIsSessionRestoring] = useState(() =>
+  const [isReviewsLoading, setIsReviewsLoading] = useState(() =>
     Boolean(localStorage.getItem("token"))
   );
-  const [isReviewsLoading, setIsReviewsLoading] = useState(false);
+  const [isReviewsError, setIsReviewsError] = useState(false);
 
+  // Tracks which user's reviews are already in state to prevent duplicate fetches.
+  const lastFetchedForId = useRef(null);
+
+  // ── Session restore ────────────────────────────────────────────────────────
+  // Runs once on mount. Fires /users/me, /appointments/mine and /reviews/*
+  // ALL IN PARALLEL so there is only one round-trip delay on refresh.
+  // No secondary effect exists — this is the only path for session-restored logins.
   useEffect(() => {
-    let isCancelled = false;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setIsReviewsLoading(false);
+      return;
+    }
 
-    (async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setIsSessionRestoring(false);
-        return;
-      }
+    const role = getTokenRole(token);
+    const reviewsEndpoint =
+      role === "doctor" ? "/reviews/doctor" :
+      role === "patient" ? "/reviews/patient" :
+      null;
 
-      try {
-        const me = await apiFetch("/users/me");
-        const user = normalizeId(me);
+    let cancelled = false;
 
-        let appointments = [];
-        try {
-          const mine = await apiFetch("/appointments/mine");
-          appointments = normalizeArray(mine);
-        } catch {
-          appointments = [];
-        }
+    Promise.allSettled([
+      apiFetch("/users/me"),
+      apiFetch("/appointments/mine"),
+      reviewsEndpoint ? apiFetch(reviewsEndpoint) : Promise.resolve([]),
+    ]).then(([meResult, appointmentsResult, reviewsResult]) => {
+      if (cancelled) return;
 
-        if (isCancelled) return;
-
-        setAllData((prev) => ({
-          ...prev,
-          appointments,
-        }));
+      // ── user / session ──
+      if (meResult.status === "fulfilled") {
+        const user = normalizeId(meResult.value);
 
         if (user.role === "doctor") {
           setLoggedInDoctor(user);
           setLoggedInPatient(null);
           setDoctorTab("profile");
           setPage("doctor");
-
-          const workingDays = new Set(
-            (user.workingDays || "").split(",").filter(Boolean)
+          setWorkingDaysDraft(
+            new Set((user.workingDays || "").split(",").filter(Boolean))
           );
-
-          setWorkingDaysDraft(workingDays);
           setStartTimeDraft(user.startTime || "09:00");
           setEndTimeDraft(user.endTime || "17:00");
         } else if (user.role === "patient") {
@@ -69,17 +84,33 @@ export default function useSessionReviews({
           setPatientTab("profile");
           setPage("patient");
         }
-      } catch {
+
+        lastFetchedForId.current = String(user.id || user._id || "");
+      } else {
         localStorage.removeItem("token");
-      } finally {
-        if (!isCancelled) {
-          setIsSessionRestoring(false);
-        }
       }
-    })();
+
+      // ── appointments ──
+      if (appointmentsResult.status === "fulfilled") {
+        setAllData((prev) => ({
+          ...prev,
+          appointments: normalizeArray(appointmentsResult.value),
+        }));
+      }
+
+      // ── reviews ──
+      if (reviewsResult.status === "fulfilled") {
+        setReviews(toReviewsArray(reviewsResult.value));
+        setIsReviewsError(false);
+      } else {
+        setIsReviewsError(true);
+      }
+
+      setIsReviewsLoading(false);
+    });
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
     };
   }, [
     setAllData,
@@ -93,50 +124,41 @@ export default function useSessionReviews({
     setWorkingDaysDraft,
   ]);
 
-  useEffect(() => {
-    let isCancelled = false;
+  // ── Called directly by login handlers ─────────────────────────────────────
+  // This is the only other place reviews are fetched.
+  // No useEffect watches currentDoctor/currentPatient — that was the race source.
+  async function fetchReviewsForUser(userId, role) {
+    const id = String(userId || "");
+    if (id && id === lastFetchedForId.current) return;
 
-    (async () => {
-      const token = localStorage.getItem("token");
-      if (!token || (!currentDoctor && !currentPatient)) {
-        setReviews([]);
-        setIsReviewsLoading(false);
-        return;
-      }
+    setIsReviewsLoading(true);
+    setIsReviewsError(false);
 
-      setIsReviewsLoading(true);
+    const endpoint = role === "doctor" ? "/reviews/doctor" : "/reviews/patient";
 
-      try {
-        const endpoint = currentDoctor ? "/reviews/doctor" : "/reviews/patient";
-        const data = await apiFetch(endpoint);
-        const nextReviews = normalizeArray(
-          Array.isArray(data) ? data : data?.reviews || []
-        );
-
-        if (!isCancelled) {
-          setReviews(nextReviews);
-        }
-      } catch (error) {
-        console.error("Error fetching reviews:", error);
-        if (!isCancelled) {
-          setReviews([]);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsReviewsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentDoctor, currentPatient]);
+    try {
+      const data = await apiFetch(endpoint);
+      setReviews(toReviewsArray(data));
+      lastFetchedForId.current = id;
+    } catch (err) {
+      console.error("Error fetching reviews:", err);
+      setReviews([]);
+      setIsReviewsError(true);
+    } finally {
+      setIsReviewsLoading(false);
+    }
+  }
 
   return {
     reviews,
     setReviews,
-    isSessionRestoring,
     isReviewsLoading,
+    isReviewsError,
+    fetchReviewsForUser,
+    resetReviews: () => {
+      setReviews([]);
+      setIsReviewsError(false);
+      lastFetchedForId.current = null;
+    },
   };
 }

@@ -15,6 +15,7 @@ export default function PatientDashboard({
   rescheduleAppointment,
   cancelAppointment,
   isHistoryLoading = false,
+  isHistoryError = false,
   doctorReviews = [],
   submitReview,
 }) {
@@ -328,6 +329,10 @@ export default function PatientDashboard({
               {isHistoryLoading ? (
                 <p style={{ color: "var(--text-secondary)" }}>
                   Loading appointment history...
+                </p>
+              ) : isHistoryError ? (
+                <p style={{ color: "var(--text-secondary)" }}>
+                  Could not load appointment history. Please check your connection and refresh the page.
                 </p>
               ) : patientPast.length === 0 ? (
                 <p style={{ color: "var(--text-secondary)" }}>No past appointments</p>

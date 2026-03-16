@@ -22,8 +22,10 @@ export default function useAppBootstrap({ setAllData, showMessage }) {
           doctors,
           appointments,
         }));
-      } catch (e) {
-        showMessage("✗ Failed loading data: " + e.message, "error");
+      } catch {
+        // Bootstrap failure is non-critical — session restore in useSessionReviews
+        // handles auth and appointments. Silently ignore so the UI does not show
+        // an alarming error when the backend is momentarily slow to respond.
       }
     })();
   }, [setAllData, showMessage]);
