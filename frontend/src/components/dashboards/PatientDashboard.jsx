@@ -260,7 +260,7 @@ export default function PatientDashboard({
               ) : (
                 patientUpcoming.map((appt) => {
                   const doc = (allData.doctors || []).find(
-                    (d) => d.id === appt.doctorId || d._id === appt.doctorId
+                    (d) => String(d.id || d._id) === String(appt.doctorId)
                   );
 
                   return (
@@ -341,7 +341,7 @@ export default function PatientDashboard({
                   const appointmentId = appt.id || appt._id;
 
                   const doc = (allData.doctors || []).find(
-                    (d) => d.id === appt.doctorId || d._id === appt.doctorId
+                    (d) => String(d.id || d._id) === String(appt.doctorId)
                   );
 
                   const existingReview = doctorReviews.find((review) => {
