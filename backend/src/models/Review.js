@@ -4,13 +4,19 @@ const reviewSchema = new mongoose.Schema(
   {
     doctor_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Doctor",
+      ref: "User",
       required: true,
     },
     patient_id: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Patient",
+      ref: "User",
       required: true,
+    },
+    appointment_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Appointment",
+      required: true,
+      unique: true,
     },
     rating: {
       type: Number,
@@ -23,9 +29,7 @@ const reviewSchema = new mongoose.Schema(
       default: "",
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Review", reviewSchema);

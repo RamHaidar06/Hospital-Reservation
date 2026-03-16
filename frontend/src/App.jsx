@@ -157,9 +157,8 @@ export default function App() {
     if (!selectedDoctorId) return null;
 
     return (
-      (allData.doctors || []).find(
-        (d) => (d.id || d._id) === selectedDoctorId
-      ) || null
+      (allData.doctors || []).find((d) => (d.id || d._id) === selectedDoctorId) ||
+      null
     );
   }, [selectedDoctorId, allData.doctors]);
 
@@ -198,7 +197,7 @@ export default function App() {
           ? review.patient_id
           : review.patient_id?._id || review.patient_id?.id;
 
-      return reviewPatientId === patientId;
+      return String(reviewPatientId) === String(patientId);
     });
   }, [reviews, currentPatient]);
 
@@ -213,38 +212,43 @@ export default function App() {
           ? review.doctor_id
           : review.doctor_id?._id || review.doctor_id?.id;
 
-      return reviewDoctorId === doctorId;
+      return String(reviewDoctorId) === String(doctorId);
     });
   }, [reviews, currentDoctor]);
 
-  async function submitReview({ doctor_id, rating, comment }) {
-  const token = localStorage.getItem("token");
+  async function submitReview({
+    doctor_id,
+    appointment_id,
+    rating,
+    comment,
+  }) {
+    const token = localStorage.getItem("token");
 
-  const response = await fetch("http://localhost:3000/api/reviews", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      doctor_id,
-      rating,
-      comment,
-    }),
-  });
+    const response = await fetch("http://localhost:3000/api/reviews", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        doctor_id,
+        appointment_id,
+        rating,
+        comment,
+      }),
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    throw new Error(data.message || "Failed to submit review");
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to submit review");
+    }
+
+    setReviews((prev) => [...prev, data.review]);
+    showMessage("Review submitted successfully", "success");
+
+    return data.review;
   }
-
-  setReviews((prev) => [...prev, data.review]);
-  showMessage("Review submitted successfully", "success");
-
-  return data.review;
-}
-
 
   function openAuthSelector() {
     setAuthRoleModal(true);

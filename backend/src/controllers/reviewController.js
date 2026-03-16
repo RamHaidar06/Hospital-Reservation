@@ -1,4 +1,5 @@
 const Review = require("../models/Review");
+const Appointment = require("../models/Appointment");
 
 const getMyDoctorReviews = async (req, res) => {
   try {
@@ -23,24 +24,59 @@ const createReview = async (req, res) => {
       return res.status(403).json({ message: "Only patients can leave reviews" });
     }
 
-    const { doctor_id, rating, comment } = req.body;
+    const { doctor_id, appointment_id, rating, comment } = req.body;
 
-    if (!doctor_id || !rating) {
-      return res.status(400).json({ message: "Doctor and rating are required" });
+    if (!doctor_id || !appointment_id || !rating) {
+      return res.status(400).json({
+        message: "Doctor, appointment, and rating are required",
+      });
     }
 
-    const existingReview = await Review.findOne({
-      doctor_id,
-      patient_id: patientId,
-    });
+    const appointment = await Appointment.findById(appointment_id);
+
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    const appointmentPatientId = appointment.patient_id || appointment.patientId;
+    const appointmentDoctorId = appointment.doctor_id || appointment.doctorId;
+
+    if (!appointmentPatientId) {
+      return res.status(400).json({
+        message: "Appointment patient was not found",
+      });
+    }
+
+    if (!appointmentDoctorId) {
+      return res.status(400).json({
+        message: "Appointment doctor was not found",
+      });
+    }
+
+    if (String(appointmentPatientId) !== String(patientId)) {
+      return res.status(403).json({
+        message: "You can only review your own appointments",
+      });
+    }
+
+    if (String(appointmentDoctorId) !== String(doctor_id)) {
+      return res.status(400).json({
+        message: "Doctor does not match this appointment",
+      });
+    }
+
+    const existingReview = await Review.findOne({ appointment_id });
 
     if (existingReview) {
-      return res.status(400).json({ message: "You already reviewed this doctor" });
+      return res.status(400).json({
+        message: "You already reviewed this appointment",
+      });
     }
 
     const review = await Review.create({
       doctor_id,
       patient_id: patientId,
+      appointment_id,
       rating,
       comment,
     });
