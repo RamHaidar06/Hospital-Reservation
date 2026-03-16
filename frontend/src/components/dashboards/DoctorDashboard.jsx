@@ -15,9 +15,16 @@ export default function DoctorDashboard({
   doctorSlots,
   allData,
   doctorAppointments,
+  isReviewsLoading = false,
   doctorReviews = [],
 }) {
   if (page !== "doctor" || !currentDoctor) return null;
+
+  const asId = (value) => {
+    if (!value) return "";
+    if (typeof value === "string" || typeof value === "number") return String(value);
+    return String(value.id || value._id || "");
+  };
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -160,7 +167,9 @@ export default function DoctorDashboard({
                 <p style={{ color: "var(--text-secondary)" }}>No appointments scheduled</p>
               ) : (
                 doctorAppointments.map((appt) => {
-                  const patient = (allData.patients || []).find((p) => p.id === appt.patientId);
+                  const patient = (allData.patients || []).find(
+                    (p) => asId(p.id || p._id) === asId(appt.patientId)
+                  );
                   const isUpcoming = new Date(appt.appointmentDate) >= new Date();
 
                   return (
@@ -187,13 +196,15 @@ export default function DoctorDashboard({
   <div className="glass-card" style={{ padding: 32 }}>
     <h3 style={{ marginTop: 0, marginBottom: 24 }}>My Reviews</h3>
 
-    {doctorReviews.length === 0 ? (
+    {isReviewsLoading ? (
+      <p style={{ color: "var(--text-secondary)" }}>Loading reviews...</p>
+    ) : doctorReviews.length === 0 ? (
       <p style={{ color: "var(--text-secondary)" }}>No reviews available yet.</p>
     ) : (
       <div style={{ display: "grid", gap: 16 }}>
         {doctorReviews.map((review) => (
           <div
-            key={review._id}
+            key={review.id || review._id}
             className="glass-card"
             style={{
               padding: 20,
@@ -209,7 +220,9 @@ export default function DoctorDashboard({
               }}
             >
               <p style={{ fontWeight: 600, margin: 0, color: "white" }}>
-                {review.patient_id?.name || "Anonymous Patient"}
+                {review.patient_id?.firstName || review.patient_id?.lastName
+                  ? `${review.patient_id?.firstName || ""} ${review.patient_id?.lastName || ""}`.trim()
+                  : review.patient_id?.name || "Anonymous Patient"}
               </p>
 
               <p style={{ color: "#facc15", fontWeight: 700, margin: 0 }}>

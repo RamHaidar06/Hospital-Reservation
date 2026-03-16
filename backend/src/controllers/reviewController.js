@@ -16,6 +16,21 @@ const getMyDoctorReviews = async (req, res) => {
   }
 };
 
+const getMyPatientReviews = async (req, res) => {
+  try {
+    const patientId = req.user.userId || req.user.id;
+
+    const reviews = await Review.find({ patient_id: patientId })
+      .populate("doctor_id", "firstName lastName name")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(reviews);
+  } catch (error) {
+    console.error("Error fetching patient reviews:", error);
+    res.status(500).json({ message: "Failed to fetch reviews" });
+  }
+};
+
 const createReview = async (req, res) => {
   try {
     const patientId = req.user.userId || req.user.id;
@@ -40,18 +55,6 @@ const createReview = async (req, res) => {
 
     const appointmentPatientId = appointment.patient_id || appointment.patientId;
     const appointmentDoctorId = appointment.doctor_id || appointment.doctorId;
-
-    if (!appointmentPatientId) {
-      return res.status(400).json({
-        message: "Appointment patient was not found",
-      });
-    }
-
-    if (!appointmentDoctorId) {
-      return res.status(400).json({
-        message: "Appointment doctor was not found",
-      });
-    }
 
     if (String(appointmentPatientId) !== String(patientId)) {
       return res.status(403).json({
@@ -93,5 +96,6 @@ const createReview = async (req, res) => {
 
 module.exports = {
   getMyDoctorReviews,
+  getMyPatientReviews,
   createReview,
 };

@@ -24,6 +24,9 @@ import useAuthHandlers from "./hooks/useAuthHandlers";
 import useProfileActions from "./hooks/useProfileActions";
 import useDoctorAvailability from "./hooks/useDoctorAvailability";
 import useAppBootstrap from "./hooks/useAppBootstrap";
+import useSessionReviews from "./hooks/useSessionReviews";
+import { apiFetch } from "./API/http";
+import { normalizeId } from "./utils/normalize";
 
 export default function App() {
   const [allData, setAllData] = useState({
@@ -31,8 +34,6 @@ export default function App() {
     doctors: [],
     appointments: [],
   });
-
-  const [reviews, setReviews] = useState([]);
 
   const [loggedInPatient, setLoggedInPatient] = useState(null);
   const [loggedInDoctor, setLoggedInDoctor] = useState(null);
@@ -116,6 +117,25 @@ export default function App() {
     setLoggedInDoctor,
     setAllData,
     showMessage,
+  });
+
+  const {
+    reviews,
+    setReviews,
+    isSessionRestoring,
+    isReviewsLoading,
+  } = useSessionReviews({
+    currentDoctor,
+    currentPatient,
+    setAllData,
+    setLoggedInDoctor,
+    setLoggedInPatient,
+    setPage,
+    setPatientTab,
+    setDoctorTab,
+    setWorkingDaysDraft: availability.setWorkingDaysDraft,
+    setStartTimeDraft: availability.setStartTimeDraft,
+    setEndTimeDraft: availability.setEndTimeDraft,
   });
 
   const {
@@ -216,20 +236,31 @@ export default function App() {
     });
   }, [reviews, currentDoctor]);
 
+  const patientReviewsByAppointment = useMemo(() => {
+    const map = new Map();
+
+    for (const review of patientReviews) {
+      const reviewAppointmentId =
+        typeof review.appointment_id === "string"
+          ? review.appointment_id
+          : review.appointment_id?._id || review.appointment_id?.id;
+
+      if (reviewAppointmentId) {
+        map.set(String(reviewAppointmentId), review);
+      }
+    }
+
+    return map;
+  }, [patientReviews]);
+
   async function submitReview({
     doctor_id,
     appointment_id,
     rating,
     comment,
   }) {
-    const token = localStorage.getItem("token");
-
-    const response = await fetch("http://localhost:3000/api/reviews", {
+    const data = await apiFetch("/reviews", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
       body: JSON.stringify({
         doctor_id,
         appointment_id,
@@ -238,16 +269,22 @@ export default function App() {
       }),
     });
 
-    const data = await response.json();
+    const savedReview = normalizeId(data.review);
+    setReviews((prev) => {
+      const next = prev.filter((review) => {
+        const existingAppointmentId =
+          typeof review.appointment_id === "string"
+            ? review.appointment_id
+            : review.appointment_id?._id || review.appointment_id?.id;
 
-    if (!response.ok) {
-      throw new Error(data.message || "Failed to submit review");
-    }
+        return String(existingAppointmentId) !== String(appointment_id);
+      });
 
-    setReviews((prev) => [...prev, data.review]);
+      return [...next, savedReview];
+    });
     showMessage("Review submitted successfully", "success");
 
-    return data.review;
+    return savedReview;
   }
 
   function openAuthSelector() {
@@ -333,7 +370,8 @@ export default function App() {
         allData={allData}
         rescheduleAppointment={rescheduleAppointment}
         cancelAppointment={cancelAppointment}
-        doctorReviews={patientReviews}
+        isHistoryLoading={isSessionRestoring || isReviewsLoading}
+        doctorReviews={Array.from(patientReviewsByAppointment.values())}
         submitReview={submitReview}
       />
 
@@ -354,6 +392,7 @@ export default function App() {
         doctorSlots={doctorSlots}
         allData={allData}
         doctorAppointments={doctorAppointments}
+        isReviewsLoading={isSessionRestoring || isReviewsLoading}
         doctorReviews={doctorReviews}
       />
 

@@ -90,7 +90,7 @@ router.post("/register", async (req, res) => {
  */
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     if (!email || !password)
       return res.status(400).json({ message: "Missing fields" });
@@ -102,6 +102,12 @@ router.post("/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok)
       return res.status(401).json({ message: "Invalid credentials" });
+
+    if (role && user.role !== role) {
+      return res.status(403).json({
+        message: `This account is registered as a ${user.role}. Please use the ${user.role} login.`,
+      });
+    }
 
     const token = jwt.sign(
       { userId: user._id, role: user.role },

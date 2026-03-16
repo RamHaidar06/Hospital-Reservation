@@ -14,6 +14,7 @@ export default function PatientDashboard({
   allData,
   rescheduleAppointment,
   cancelAppointment,
+  isHistoryLoading = false,
   doctorReviews = [],
   submitReview,
 }) {
@@ -324,7 +325,11 @@ export default function PatientDashboard({
           <div className="glass-card" style={{ padding: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 24 }}>Appointment History</h3>
             <div style={{ display: "grid", gap: 16 }}>
-              {patientPast.length === 0 ? (
+              {isHistoryLoading ? (
+                <p style={{ color: "var(--text-secondary)" }}>
+                  Loading appointment history...
+                </p>
+              ) : patientPast.length === 0 ? (
                 <p style={{ color: "var(--text-secondary)" }}>No past appointments</p>
               ) : (
                 patientPast.map((appt) => {

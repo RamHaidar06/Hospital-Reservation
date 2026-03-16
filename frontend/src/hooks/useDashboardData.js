@@ -2,6 +2,25 @@ import { useMemo } from "react";
 import { normalizeId } from "../utils/normalize";
 import { generateTimeSlots } from "../utils/slots";
 
+function extractId(value) {
+  if (!value) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  return String(value.id || value._id || "");
+}
+
+function toAppointmentDateTime(appointment) {
+  const date = appointment?.appointmentDate;
+  const time = appointment?.appointmentTime || "00:00";
+
+  if (!date) return new Date(0);
+
+  const dateTime = new Date(`${date}T${time}:00`);
+  if (!Number.isNaN(dateTime.getTime())) return dateTime;
+
+  const fallback = new Date(date);
+  return Number.isNaN(fallback.getTime()) ? new Date(0) : fallback;
+}
+
 export default function useDashboardData({
   allData,
   loggedInDoctor,
@@ -35,33 +54,36 @@ export default function useDashboardData({
   const patientUpcoming = useMemo(() => {
     if (!currentPatient) return [];
 
+    const patientId = extractId(currentPatient);
+    const now = new Date();
+
     return (allData.appointments || [])
       .filter(
         (a) =>
-          (a.patientId === currentPatient.id ||
-            a.patientId === currentPatient._id) &&
-          new Date(a.appointmentDate) >= new Date() &&
+          extractId(a.patientId) === patientId &&
+          toAppointmentDateTime(a) >= now &&
           a.status !== "cancelled"
       )
       .sort(
-        (a, b) =>
-          new Date(a.appointmentDate) - new Date(b.appointmentDate)
+        (a, b) => toAppointmentDateTime(a) - toAppointmentDateTime(b)
       );
   }, [allData.appointments, currentPatient]);
 
   const patientPast = useMemo(() => {
     if (!currentPatient) return [];
 
+    const patientId = extractId(currentPatient);
+    const now = new Date();
+
     return (allData.appointments || [])
       .filter(
         (a) =>
-          (a.patientId === currentPatient.id ||
-            a.patientId === currentPatient._id) &&
-          new Date(a.appointmentDate) < new Date()
+          extractId(a.patientId) === patientId &&
+          toAppointmentDateTime(a) < now &&
+          a.status !== "cancelled"
       )
       .sort(
-        (a, b) =>
-          new Date(b.appointmentDate) - new Date(a.appointmentDate)
+        (a, b) => toAppointmentDateTime(b) - toAppointmentDateTime(a)
       );
   }, [allData.appointments, currentPatient]);
 
@@ -72,10 +94,11 @@ export default function useDashboardData({
   const doctorAppointments = useMemo(() => {
     if (!currentDoctor) return [];
 
+    const doctorId = extractId(currentDoctor);
+
     return (allData.appointments || []).filter(
       (a) =>
-        (a.doctorId === currentDoctor.id ||
-          a.doctorId === currentDoctor._id) &&
+        extractId(a.doctorId) === doctorId &&
         a.status !== "cancelled"
     );
   }, [allData.appointments, currentDoctor]);
