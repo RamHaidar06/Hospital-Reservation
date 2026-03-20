@@ -264,7 +264,7 @@ export default function DoctorDashboard({
                 {/* ── Confirmed ── */}
                 <AppointmentSection title="Confirmed" count={confirmed.length} color="var(--cyan-bright, #00d9ff)" defaultOpen={true}>
                   {confirmed.map((appt) => {
-                    const patient = (allData.patients || []).find((p) => asId(p.id || p._id) === asId(appt.patientId));
+                    const patient = typeof appt.patientId === "object" ? appt.patientId : (allData.patients || []).find((p) => asId(p.id || p._id) === asId(appt.patientId));
                     return (
                       <DoctorApptCard key={appt.id || appt._id} appt={appt} patient={patient}
                         isCompleted={false} isPending={false}
@@ -276,7 +276,7 @@ export default function DoctorDashboard({
                 {/* ── Pending ── */}
                 <AppointmentSection title="Pending" count={pending.length} color="#f59e0b" defaultOpen={true}>
                   {pending.map((appt) => {
-                    const patient = (allData.patients || []).find((p) => asId(p.id || p._id) === asId(appt.patientId));
+                    const patient = typeof appt.patientId === "object" ? appt.patientId : (allData.patients || []).find((p) => asId(p.id || p._id) === asId(appt.patientId));
                     return (
                       <DoctorApptCard key={appt.id || appt._id} appt={appt} patient={patient}
                         isCompleted={false} isPending={true}
@@ -288,7 +288,7 @@ export default function DoctorDashboard({
                 {/* ── Completed ── */}
                 <AppointmentSection title="Completed" count={completed.length} color="#10b981" defaultOpen={false}>
                   {completed.map((appt) => {
-                    const patient = (allData.patients || []).find((p) => asId(p.id || p._id) === asId(appt.patientId));
+                    const patient = typeof appt.patientId === "object" ? appt.patientId : (allData.patients || []).find((p) => asId(p.id || p._id) === asId(appt.patientId));
                     return (
                       <DoctorApptCard key={appt.id || appt._id} appt={appt} patient={patient}
                         isCompleted={true} isPending={false}

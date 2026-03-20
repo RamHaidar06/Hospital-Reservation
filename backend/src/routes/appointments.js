@@ -32,7 +32,12 @@ router.get("/mine", auth, async (req, res) => {
 
     if (!filter) return res.status(403).json({ message: "Invalid role" });
 
-    const appts = await Appointment.find(filter).sort({ createdAt: -1 });
+    const appts = await Appointment.find(filter)
+      .populate([
+        { path: "patientId", select: "firstName lastName email" },
+        { path: "doctorId", select: "firstName lastName specialty yearsExperience email" },
+      ])
+      .sort({ createdAt: -1 });
     return res.json(appts);
   } catch (err) {
     console.log("MINE APPOINTMENTS ERROR:", err);
@@ -58,6 +63,11 @@ router.post("/", auth, async (req, res) => {
 
     if (!mongoose.Types.ObjectId.isValid(doctorId)) {
       return res.status(400).json({ message: "Invalid doctorId" });
+    }
+
+    const apptAt = parseApptDate(appointmentDate, appointmentTime);
+    if (Number.isNaN(apptAt.getTime()) || apptAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: "Appointment time must be in the future" });
     }
 
     const clash = await Appointment.findOne({

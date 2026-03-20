@@ -105,9 +105,12 @@ export default function PatientDashboard({
                 <p style={{ color: "var(--text-secondary)" }}>No upcoming appointments</p>
               ) : (
                 patientUpcoming.map((appt) => {
-                  const doc = (allData.doctors || []).find(
-                    (d) => String(d.id || d._id) === String(appt.doctorId)
-                  );
+                  const doc =
+                    appt.doctorId && typeof appt.doctorId === "object"
+                      ? appt.doctorId
+                      : (allData.doctors || []).find(
+                          (d) => String(d.id || d._id) === String(appt.doctorId)
+                        );
                   return (
                     <UpcomingAppointmentCard
                       key={appt.id || appt._id}
@@ -138,9 +141,12 @@ export default function PatientDashboard({
               ) : (
                 patientPast.map((appt) => {
                   const appointmentId = appt.id || appt._id;
-                  const doc = (allData.doctors || []).find(
-                    (d) => String(d.id || d._id) === String(appt.doctorId)
-                  );
+                  const doc =
+                    appt.doctorId && typeof appt.doctorId === "object"
+                      ? appt.doctorId
+                      : (allData.doctors || []).find(
+                          (d) => String(d.id || d._id) === String(appt.doctorId)
+                        );
                   const existingReview = doctorReviews.find((review) => {
                     const rid = typeof review.appointment_id === "string"
                       ? review.appointment_id

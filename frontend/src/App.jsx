@@ -108,6 +108,7 @@ export default function App() {
   }, [selectedDoctorId, allData.doctors]);
 
   const {
+    isBooking,
     openDoctorDetails, closeDoctorDetails, selectTimeSlot,
     bookAppointmentSubmit, cancelAppointment, rescheduleAppointment,
     confirmAppointment,    // ← new
@@ -245,6 +246,7 @@ export default function App() {
         selectedDoctor={selectedDoctor} selectedDoctorSlots={selectedDoctorSlots}
         selectTimeSlot={selectTimeSlot} apptForm={apptForm} setApptForm={setApptForm}
         todayISO={todayISO} bookAppointmentSubmit={bookAppointmentSubmit}
+        isBooking={isBooking}
       />
 
       <Toast toast={toast} />

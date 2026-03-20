@@ -8,6 +8,7 @@ export default function DoctorDetailModal({
   setApptForm,
   todayISO,
   bookAppointmentSubmit,
+  isBooking = false,
 }) {
   const doctorName = selectedDoctor
     ? `Dr. ${selectedDoctor.firstName || ""} ${selectedDoctor.lastName || ""}`.trim()
@@ -300,8 +301,9 @@ export default function DoctorDetailModal({
                   type="submit"
                   className="btn-primary"
                   style={{ flex: 1, padding: 14, fontWeight: 600 }}
+                  disabled={isBooking}
                 >
-                  Book Appointment
+                  {isBooking ? "Booking..." : "Book Appointment"}
                 </button>
                 <button
                   type="button"

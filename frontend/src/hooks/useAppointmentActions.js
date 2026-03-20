@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { apiFetch } from "../API/http";
-import { normalizeId } from "../utils/normalize";
+import { normalizeArray, normalizeId } from "../utils/normalize";
 
 function formatAppointmentDate(date) {
   if (!date) return "the selected date";
@@ -21,6 +22,8 @@ export default function useAppointmentActions({
   setPatientTab,
   showMessage,
 }) {
+  const [isBooking, setIsBooking] = useState(false);
+
   function openDoctorDetails(doctorId) {
     setSelectedDoctorId(doctorId);
     setApptForm({ date: "", time: "", reason: "", notes: "" });
@@ -38,7 +41,7 @@ export default function useAppointmentActions({
 
   async function bookAppointmentSubmit(e) {
     e.preventDefault();
-    if (!currentPatient || !selectedDoctor) return;
+    if (!currentPatient || !selectedDoctor || isBooking) return;
 
     const date   = apptForm.date;
     const time   = apptForm.time;
@@ -49,6 +52,12 @@ export default function useAppointmentActions({
       return showMessage("✗ Please fill in all required fields", "error");
     }
 
+    const selectedAt = new Date(`${date}T${time}:00`);
+    if (Number.isNaN(selectedAt.getTime()) || selectedAt.getTime() <= Date.now()) {
+      return showMessage("✗ Please select a future date/time", "error");
+    }
+
+    setIsBooking(true);
     try {
       const created = await apiFetch("/appointments", {
         method: "POST",
@@ -62,11 +71,29 @@ export default function useAppointmentActions({
       });
 
       const saved = normalizeId(created.appointment || created);
+      const savedId = String(saved.id || saved._id || "");
 
-      setAllData((prev) => ({
-        ...prev,
-        appointments: [...prev.appointments, saved],
-      }));
+      // Show the appointment immediately in UI.
+      setAllData((prev) => {
+        const exists = (prev.appointments || []).some(
+          (a) => String(a.id || a._id || "") === savedId
+        );
+        return {
+          ...prev,
+          appointments: exists ? prev.appointments : [...prev.appointments, saved],
+        };
+      });
+
+      // Sync with backend truth, but never wipe local booked data with an empty response.
+      try {
+        const mine = normalizeArray(await apiFetch("/appointments/mine"));
+        setAllData((prev) => ({
+          ...prev,
+          appointments: mine.length > 0 ? mine : prev.appointments,
+        }));
+      } catch {
+        // keep optimistic data
+      }
 
       setDoctorDetailOpen(false);
       setSelectedDoctorId(null);
@@ -84,6 +111,8 @@ export default function useAppointmentActions({
       }
     } catch (err) {
       showMessage("✗ " + err.message, "error");
+    } finally {
+      setIsBooking(false);
     }
   }
 
@@ -229,6 +258,7 @@ export default function useAppointmentActions({
   }
 
   return {
+    isBooking,
     openDoctorDetails,
     closeDoctorDetails,
     selectTimeSlot,

@@ -9,18 +9,9 @@ export default function useAppBootstrap({ setAllData, showMessage }) {
         const docs = await apiFetch("/users/doctors");
         const doctors = normalizeArray(docs);
 
-        let appointments = [];
-        try {
-          const mine = await apiFetch("/appointments/mine");
-          appointments = normalizeArray(mine);
-        } catch {
-          appointments = [];
-        }
-
         setAllData((prev) => ({
           ...prev,
           doctors,
-          appointments,
         }));
       } catch {
         // Bootstrap failure is non-critical — session restore in useSessionReviews
