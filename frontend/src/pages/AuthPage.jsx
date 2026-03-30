@@ -93,6 +93,16 @@ export default function AuthPage({
                     />
                   </div>
 
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.9rem", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!patientLogin.rememberMe}
+                      onChange={(e) => setPatientLogin((s) => ({ ...s, rememberMe: e.target.checked }))}
+                      style={{ width: 16, height: 16, accentColor: "var(--cyan-bright)" }}
+                    />
+                    Remember me on this device
+                  </label>
+
                   <button type="submit" className="btn-primary" style={{ width: "100%", padding: 16, fontWeight: 600 }}>
                     Sign In
                   </button>
@@ -360,6 +370,16 @@ export default function AuthPage({
                       onChange={(e) => setDoctorLogin((s) => ({ ...s, password: e.target.value }))}
                     />
                   </div>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-secondary)", marginBottom: 20, fontSize: "0.9rem", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!doctorLogin.rememberMe}
+                      onChange={(e) => setDoctorLogin((s) => ({ ...s, rememberMe: e.target.checked }))}
+                      style={{ width: 16, height: 16, accentColor: "var(--cyan-bright)" }}
+                    />
+                    Remember me on this device
+                  </label>
 
                   <button type="submit" className="btn-primary" style={{ width: "100%", padding: 16, fontWeight: 600 }}>
                     Sign In

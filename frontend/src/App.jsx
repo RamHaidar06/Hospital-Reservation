@@ -3,9 +3,11 @@ import "./App.css";
 
 import AuthPage    from "./pages/AuthPage";
 import LandingPage from "./pages/LandingPage";
+import OTPVerification from "./components/Auth/OTPVerification";
 
 import Toast             from "./components/Toast";
 import RoleSelectorModal from "./components/Auth/RoleSelectorModal";
+import AppointmentChatbot from "./components/AppointmentChatbot";
 
 import { todayISO }          from "./utils/date";
 import { generateTimeSlots } from "./utils/slots";
@@ -41,14 +43,21 @@ export default function App() {
   const [doctorAuthView,  setDoctorAuthView]  = useState("login");
   const [activeAuthRole,  setActiveAuthRole]  = useState("patient");
 
+  // OTP verification state
+  const [awaitingOTP, setAwaitingOTP] = useState(false);
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpUserRole, setOtpUserRole] = useState("patient");
+  const [otpExpiresIn, setOtpExpiresIn] = useState(600);
+  const [otpRememberDeviceWanted, setOtpRememberDeviceWanted] = useState(false);
+
   const [patientTab, setPatientTab] = useState("profile");
   const [doctorTab,  setDoctorTab]  = useState("profile");
 
   const [doctorDetailOpen, setDoctorDetailOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState(null);
 
-  const [patientLogin,    setPatientLogin]    = useState({ email: "", password: "" });
-  const [doctorLogin,     setDoctorLogin]     = useState({ email: "", password: "" });
+  const [patientLogin,    setPatientLogin]    = useState({ email: "", password: "", rememberMe: false });
+  const [doctorLogin,     setDoctorLogin]     = useState({ email: "", password: "", rememberMe: false });
 
   const [patientRegister, setPatientRegister] = useState({
     firstName: "", lastName: "", email: "", phone: "", dob: "", password: "", confirmPassword: "",
@@ -89,6 +98,7 @@ export default function App() {
     handlePatientLoginSubmit, handlePatientRegisterSubmit,
     handleDoctorLoginSubmit,  handleDoctorRegisterSubmit,
     handlePatientForgotSubmit, handleDoctorForgotSubmit,
+    handleOTPVerificationSuccess,
     logoutPatient, logoutDoctor,
   } = useAuthHandlers({
     patientLogin, doctorLogin, patientRegister, doctorRegister,
@@ -100,6 +110,8 @@ export default function App() {
     setDoctorRegister, setDoctorAuthView, setPatientForgotEmail, setDoctorForgotEmail,
     setPatientAuthView, setPatientLogin, setDoctorLogin,
     resetReviews, fetchReviewsForUser, showMessage,
+    // OTP handlers
+    setAwaitingOTP, setOtpEmail, setOtpUserRole, setOtpExpiresIn, setOtpRememberDeviceWanted, otpUserRole,
   });
 
   const selectedDoctor = useMemo(() => {
@@ -173,7 +185,7 @@ export default function App() {
       <div className="glow-orb glow-orb-2" />
       <div className="glow-orb glow-orb-3" />
 
-      {page === "landing" && <LandingPage openAuthSelector={openAuthSelector} />}
+      {page === "landing" && <LandingPage selectRole={selectRole} />}
 
       <AuthPage
         page={page} activeAuthRole={activeAuthRole}
@@ -247,6 +259,35 @@ export default function App() {
         selectTimeSlot={selectTimeSlot} apptForm={apptForm} setApptForm={setApptForm}
         todayISO={todayISO} bookAppointmentSubmit={bookAppointmentSubmit}
         isBooking={isBooking}
+      />
+
+      {/* OTP Verification Screen */}
+      {awaitingOTP && (
+        <OTPVerification
+          email={otpEmail}
+          userRole={otpUserRole}
+          expiresIn={otpExpiresIn}
+          rememberByDefault={otpRememberDeviceWanted}
+          onSuccess={handleOTPVerificationSuccess}
+          onCancel={() => {
+            setAwaitingOTP(false);
+            setOtpEmail("");
+            setOtpRememberDeviceWanted(false);
+            if (otpUserRole === "patient") {
+              setPatientAuthView("login");
+            } else {
+              setDoctorAuthView("login");
+            }
+          }}
+        />
+      )}
+
+      {/* Chatbot Widget */}
+      <AppointmentChatbot
+        key={loggedInDoctor ? "doctor-chatbot" : "patient-chatbot"}
+        loggedInPatient={loggedInPatient}
+        loggedInDoctor={loggedInDoctor}
+        isAuthenticated={!!loggedInPatient || !!loggedInDoctor}
       />
 
       <Toast toast={toast} />

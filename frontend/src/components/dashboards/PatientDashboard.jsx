@@ -147,6 +147,10 @@ export default function PatientDashboard({
                       : (allData.doctors || []).find(
                           (d) => String(d.id || d._id) === String(appt.doctorId)
                         );
+                  const reviewDoctorId =
+                    typeof appt.doctorId === "string"
+                      ? appt.doctorId
+                      : appt.doctorId?._id || appt.doctorId?.id || doc?.id || doc?._id;
                   const existingReview = doctorReviews.find((review) => {
                     const rid = typeof review.appointment_id === "string"
                       ? review.appointment_id
@@ -183,7 +187,7 @@ export default function PatientDashboard({
                             <p style={{ color: "var(--text-secondary)", margin: 0 }}>{existingReview.comment || "No comment provided."}</p>
                           </div>
                         ) : (
-                          <ReviewForm doctorId={appt.doctorId} appointmentId={appointmentId} submitReview={submitReview} />
+                            <ReviewForm doctorId={reviewDoctorId} appointmentId={appointmentId} submitReview={submitReview} />
                         )}
                       </div>
                     </div>
@@ -344,7 +348,17 @@ function ReviewForm({ doctorId, appointmentId, submitReview }) {
     setLoading(true);
     setMessage("");
     try {
-      await submitReview({ doctor_id: doctorId, appointment_id: appointmentId, rating: Number(rating), comment });
+      const normalizedDoctorId =
+        typeof doctorId === "string"
+          ? doctorId
+          : doctorId?._id || doctorId?.id;
+
+      if (!normalizedDoctorId) {
+        setMessage("Could not identify doctor for this appointment.");
+        return;
+      }
+
+      await submitReview({ doctor_id: normalizedDoctorId, appointment_id: appointmentId, rating: Number(rating), comment });
       setMessage("Review submitted successfully.");
       setComment("");
       setRating(5);
