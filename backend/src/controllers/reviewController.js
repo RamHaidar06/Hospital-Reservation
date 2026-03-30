@@ -53,6 +53,21 @@ const createReview = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
+    if (appointment.status === "cancelled") {
+      return res.status(400).json({ message: "Cannot review a cancelled appointment" });
+    }
+
+    if (appointment.status !== "completed") {
+      return res.status(400).json({ message: "You can review only completed appointments" });
+    }
+
+    const appointmentDate = appointment.appointmentDate || appointment.appointment_date;
+    const appointmentTime = appointment.appointmentTime || appointment.appointment_time;
+    const appointmentAt = new Date(`${appointmentDate}T${appointmentTime}:00`);
+    if (!Number.isNaN(appointmentAt.getTime()) && appointmentAt.getTime() > Date.now()) {
+      return res.status(400).json({ message: "You can review only past appointments" });
+    }
+
     const appointmentPatientId = appointment.patient_id || appointment.patientId;
     const appointmentDoctorId = appointment.doctor_id || appointment.doctorId;
 

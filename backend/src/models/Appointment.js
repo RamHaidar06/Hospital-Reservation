@@ -17,7 +17,7 @@ const AppointmentSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    // Set once the 6-hour reminder has been sent — prevents duplicates
+    // Set once the 24-hour reminder has been sent — prevents duplicates
     reminderSentAt: { type: Date, default: null },
 
     // Visit Summary (doctor-only write, both roles read)

@@ -3,8 +3,8 @@
  *
  * Runs every 60 seconds. Handles two jobs:
  *
- * JOB 1 — 6-hour reminder
- *   Finds PENDING appointments within the next 6 hours that haven't had a
+ * JOB 1 — 24-hour reminder
+ *   Finds PENDING appointments within the next 24 hours that haven't had a
  *   reminder sent yet → emails the patient to go confirm on the website.
  *
  * JOB 2 — 30-minute auto-cancel
@@ -19,9 +19,9 @@ const {
   sendAppointmentAutoCancelledEmail,
 } = require("../../utils/mailer");
 
-const SIX_HOURS_MS   = 6  * 60 * 60 * 1000;
-const THIRTY_MIN_MS  = 30 * 60 * 1000;
-const INTERVAL_MS    = 60 * 1000; // every 60 seconds
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const THIRTY_MIN_MS        = 30 * 60 * 1000;
+const INTERVAL_MS          = 60 * 1000; // every 60 seconds
 
 function parseApptDate(dateStr, timeStr) {
   return new Date(`${dateStr}T${timeStr}:00`);
@@ -69,8 +69,8 @@ async function runSchedulerTick() {
         continue; // no need to check reminder for this one
       }
 
-      // ── JOB 1: Send 6-hour reminder ───────────────────────────────────────
-      if (msLeft <= SIX_HOURS_MS && !appt.reminderSentAt) {
+      // ── JOB 1: Send 24-hour reminder ──────────────────────────────────────
+      if (msLeft <= TWENTY_FOUR_HOURS_MS && !appt.reminderSentAt) {
         const patient = await User.findById(appt.patientId).select("firstName lastName email");
         const doctor  = await User.findById(appt.doctorId).select("firstName lastName");
 

@@ -10,6 +10,9 @@ const reviewRoutes = require("./routes/reviewRoutes");
 
 const { startReminderScheduler } = require("./scheduler/reminderScheduler");
 
+const chatbotController = require("./controllers/chatbotController");
+const auth = require("./middleware/auth");
+
 const app = express();
 
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
@@ -32,6 +35,15 @@ app.use("/api/auth", authRoutes);
 app.use("/api/appointments", apptRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/reviews", reviewRoutes);
+
+/**
+ * Chatbot routes
+ */
+app.get("/api/chatbot/health", chatbotController.healthCheck);
+app.post("/api/chatbot/suggest-doctors", chatbotController.suggestDoctors);
+app.get("/api/chatbot/doctors/:doctorId", chatbotController.getDoctorDetails);
+app.post("/api/chatbot/doctors/:doctorId/available-slots", chatbotController.getAvailableSlots);
+app.get("/api/chatbot/my-appointments", auth, chatbotController.getMyAppointments);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

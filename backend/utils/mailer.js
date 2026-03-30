@@ -133,7 +133,7 @@ async function sendAppointmentReminderEmail({
       <h2 style="margin:0 0 12px;color:#f59e0b;">⏰ Appointment Reminder — Action Required</h2>
       <p>Hello ${safePatientName},</p>
       <p>
-        Your appointment is coming up in <strong>less than 6 hours</strong>.
+        Your appointment is coming up in <strong>less than 24 hours</strong>.
         Please log in to the website and press the <strong>Confirm</strong> button
         on your upcoming appointment to secure your slot.
       </p>

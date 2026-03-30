@@ -13,8 +13,8 @@ const {
 
 const router = express.Router();
 
-const SIX_HOURS_MS  = 6  * 60 * 60 * 1000;
-const THIRTY_MIN_MS = 30 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const THIRTY_MIN_MS        = 30 * 60 * 1000;
 
 function parseApptDate(dateStr, timeStr) {
   return new Date(`${dateStr}T${timeStr}:00`);
@@ -104,9 +104,9 @@ router.post("/", auth, async (req, res) => {
         appointmentDate, appointmentTime, reason, notes,
       });
 
-      // If already within 6 hours, also send the reminder right now
+      // If already within 24 hours, also send the reminder right now
       // and mark it so the scheduler doesn't duplicate it
-      if (msUntil <= SIX_HOURS_MS && msUntil > THIRTY_MIN_MS) {
+      if (msUntil <= TWENTY_FOUR_HOURS_MS && msUntil > THIRTY_MIN_MS) {
         await sendAppointmentReminderEmail({
           patientEmail: appt.patientId?.email, patientName,
           doctorName:   doctorName ? `Dr. ${doctorName}` : "Doctor",
@@ -133,7 +133,7 @@ router.post("/", auth, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PATCH /api/appointments/:id/patient-confirm
-// Patient confirms their pending appointment (only allowed inside the 6h–30min window)
+// Patient confirms their pending appointment (only allowed inside the 24h–30min window)
 // ─────────────────────────────────────────────────────────────────────────────
 router.patch("/:id/patient-confirm", auth, async (req, res) => {
   try {
@@ -167,7 +167,7 @@ router.patch("/:id/patient-confirm", auth, async (req, res) => {
     const msLeft   = apptMs - Date.now();
 
     // Build window times for error message
-    const windowOpenTime  = new Date(apptMs - SIX_HOURS_MS);
+    const windowOpenTime  = new Date(apptMs - TWENTY_FOUR_HOURS_MS);
     const windowCloseTime = new Date(apptMs - THIRTY_MIN_MS);
 
     const fmt = (d) =>
@@ -176,7 +176,7 @@ router.patch("/:id/patient-confirm", auth, async (req, res) => {
       d.toLocaleDateString([], { month: "short", day: "numeric" });
 
     // Too early — outside confirmation window
-    if (msLeft > SIX_HOURS_MS) {
+    if (msLeft > TWENTY_FOUR_HOURS_MS) {
       return res.status(400).json({
         message: `You can confirm your appointment between ${fmt(windowOpenTime)} and ${fmt(windowCloseTime)}.`,
         tooEarly: true,
@@ -351,6 +351,11 @@ router.patch("/:id/reschedule", auth, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid appointment id" });
     if (!appointmentDate || !appointmentTime)  return res.status(400).json({ message: "Missing fields" });
 
+    const nextAt = parseApptDate(appointmentDate, appointmentTime);
+    if (Number.isNaN(nextAt.getTime()) || nextAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: "Rescheduled time must be in the future" });
+    }
+
     const appt = await Appointment.findById(id);
     if (!appt) return res.status(404).json({ message: "Appointment not found" });
     if (role !== "patient" || String(appt.patientId) !== String(userId)) {
@@ -439,6 +444,21 @@ router.patch("/:id", auth, async (req, res) => {
       if (role !== "patient" || String(appt.patientId) !== String(userId)) {
         return res.status(403).json({ message: "Only the patient can reschedule" });
       }
+
+      const nextAt = parseApptDate(appointmentDate, appointmentTime);
+      if (Number.isNaN(nextAt.getTime()) || nextAt.getTime() <= Date.now()) {
+        return res.status(400).json({ message: "Rescheduled time must be in the future" });
+      }
+
+      const clash = await Appointment.findOne({
+        _id: { $ne: appt._id },
+        doctorId: appt.doctorId,
+        appointmentDate,
+        appointmentTime,
+        status: { $ne: "cancelled" },
+      });
+      if (clash) return res.status(409).json({ message: "Time slot already booked" });
+
       appt.appointmentDate = appointmentDate;
       appt.appointmentTime = appointmentTime;
       appt.status          = "pending";
