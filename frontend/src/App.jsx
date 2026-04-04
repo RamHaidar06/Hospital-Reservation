@@ -149,12 +149,75 @@ export default function App() {
     return map;
   }, [patientReviews]);
 
-  async function submitReview({ doctor_id, appointment_id, rating, comment }) {
+  function applyDoctorRatingUpdate(doctors, doctorId, newRating, previousReview = null, publicReview = null) {
+    return (doctors || []).map((doctor) => {
+      const id = doctor.id || doctor._id;
+      if (String(id) !== String(doctorId)) return doctor;
+
+      const currentReviewCount = Number(doctor.reviewCount || 0);
+      const currentAverageRating = Number(doctor.averageRating || 0);
+      const previousRating = previousReview ? Number(previousReview.rating || 0) : null;
+
+      let nextReviewCount = currentReviewCount;
+      let totalRatingPoints = currentAverageRating * currentReviewCount;
+
+      if (previousRating) {
+        totalRatingPoints -= previousRating;
+      } else {
+        nextReviewCount += 1;
+      }
+
+      totalRatingPoints += Number(newRating);
+
+      return {
+        ...doctor,
+        reviewCount: nextReviewCount,
+        averageRating: nextReviewCount > 0 ? Number((totalRatingPoints / nextReviewCount).toFixed(1)) : 0,
+        publicReviews: publicReview
+          ? [publicReview, ...(doctor.publicReviews || []).filter((review) => String(review.id) !== String(publicReview.id))]
+          : doctor.publicReviews || [],
+      };
+    });
+  }
+
+  function updateDoctorPublicReview(doctors, doctorId, reviewId, updates) {
+    return (doctors || []).map((doctor) => {
+      const id = doctor.id || doctor._id;
+      if (String(id) !== String(doctorId)) return doctor;
+
+      return {
+        ...doctor,
+        publicReviews: (doctor.publicReviews || []).map((review) =>
+          String(review.id) === String(reviewId) ? { ...review, ...updates } : review
+        ),
+      };
+    });
+  }
+
+  async function submitReview({ doctor_id, appointment_id, rating, comment, hideFromPublic, hideFromDoctor }) {
+    const previousReview = patientReviews.find((review) => {
+      const rid = typeof review.appointment_id === "string"
+        ? review.appointment_id
+        : review.appointment_id?._id || review.appointment_id?.id;
+      return String(rid) === String(appointment_id);
+    });
+
     const data = await apiFetch("/reviews", {
       method: "POST",
-      body: JSON.stringify({ doctor_id, appointment_id, rating, comment }),
+      body: JSON.stringify({ doctor_id, appointment_id, rating, comment, hideFromPublic, hideFromDoctor }),
     });
     const savedReview = normalizeId(data.review);
+    const publicReview = {
+      id: savedReview.id || savedReview._id,
+      rating: Number(savedReview.rating),
+      comment: savedReview.comment || "",
+      patientName: hideFromPublic
+        ? "Anonymous Patient"
+        : [currentPatient?.firstName, currentPatient?.lastName].filter(Boolean).join(" ").trim() || "Anonymous Patient",
+      hideFromPublic: Boolean(hideFromPublic),
+      hideFromDoctor: Boolean(hideFromDoctor),
+      createdAt: savedReview.createdAt || new Date().toISOString(),
+    };
     setReviews((prev) => {
       const next = prev.filter((r) => {
         const rid = typeof r.appointment_id === "string"
@@ -163,8 +226,44 @@ export default function App() {
       });
       return [...next, savedReview];
     });
+    setAllData((prev) => ({
+      ...prev,
+      doctors: applyDoctorRatingUpdate(prev.doctors, doctor_id, rating, previousReview, publicReview),
+    }));
     showMessage("Review submitted successfully", "success");
     return savedReview;
+  }
+
+  async function updateReviewVisibility({ reviewId, doctorId, hideFromPublic, hideFromDoctor }) {
+    const data = await apiFetch(`/reviews/${reviewId}/visibility`, {
+      method: "PATCH",
+      body: JSON.stringify({ hideFromPublic, hideFromDoctor }),
+    });
+
+    const updatedReview = normalizeId(data.review);
+
+    setReviews((prev) =>
+      prev.map((review) => {
+        const id = review.id || review._id;
+        return String(id) === String(reviewId)
+          ? { ...review, ...updatedReview, hideFromPublic: Boolean(hideFromPublic), hideFromDoctor: Boolean(hideFromDoctor) }
+          : review;
+      })
+    );
+
+    setAllData((prev) => ({
+      ...prev,
+      doctors: updateDoctorPublicReview(prev.doctors, doctorId, reviewId, {
+        patientName: hideFromPublic
+          ? "Anonymous Patient"
+          : [currentPatient?.firstName, currentPatient?.lastName].filter(Boolean).join(" ").trim() || "Anonymous Patient",
+        hideFromPublic: Boolean(hideFromPublic),
+        hideFromDoctor: Boolean(hideFromDoctor),
+      }),
+    }));
+
+    showMessage("Review visibility updated", "success");
+    return updatedReview;
   }
 
   function openAuthSelector()  { setAuthRoleModal(true);  }
@@ -185,10 +284,18 @@ export default function App() {
       <div className="glow-orb glow-orb-2" />
       <div className="glow-orb glow-orb-3" />
 
-      {page === "landing" && <LandingPage selectRole={selectRole} />}
+      {page === "landing" && (
+        <LandingPage
+          selectRole={selectRole}
+          openAuthSelector={openAuthSelector}
+          doctors={allData.doctors || []}
+          currentPatient={currentPatient}
+          patientReviews={patientReviews}
+        />
+      )}
 
       <AuthPage
-        page={page} activeAuthRole={activeAuthRole}
+        page={page} setPage={setPage} activeAuthRole={activeAuthRole}
         patientAuthView={patientAuthView} doctorAuthView={doctorAuthView}
         patientLogin={patientLogin}   setPatientLogin={setPatientLogin}
         doctorLogin={doctorLogin}     setDoctorLogin={setDoctorLogin}
@@ -220,6 +327,7 @@ export default function App() {
         isHistoryLoading={isReviewsLoading} isHistoryError={isReviewsError}
         doctorReviews={Array.from(patientReviewsByAppointment.values())}
         submitReview={submitReview}
+        updateReviewVisibility={updateReviewVisibility}
         saveVisitSummary={saveVisitSummary}
       />
 
@@ -259,6 +367,8 @@ export default function App() {
         selectTimeSlot={selectTimeSlot} apptForm={apptForm} setApptForm={setApptForm}
         todayISO={todayISO} bookAppointmentSubmit={bookAppointmentSubmit}
         isBooking={isBooking}
+        currentPatient={currentPatient}
+        patientReviews={patientReviews}
       />
 
       {/* OTP Verification Screen */}

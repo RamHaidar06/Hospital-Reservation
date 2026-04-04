@@ -98,7 +98,7 @@ export default function useDashboardData({
   }, [allData.appointments, currentPatient]);
 
   const visibleDoctors = useMemo(() => {
-    return (allData.doctors || []).slice(0, 6);
+    return allData.doctors || [];
   }, [allData.doctors]);
 
   const doctorAppointments = useMemo(() => {

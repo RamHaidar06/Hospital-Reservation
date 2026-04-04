@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export default function DoctorDetailModal({
   doctorDetailOpen,
   closeDoctorDetails,
@@ -9,10 +11,34 @@ export default function DoctorDetailModal({
   todayISO,
   bookAppointmentSubmit,
   isBooking = false,
+  currentPatient = null,
+  patientReviews = [],
 }) {
   const doctorName = selectedDoctor
     ? `Dr. ${selectedDoctor.firstName || ""} ${selectedDoctor.lastName || ""}`.trim()
     : "Doctor";
+  const averageRating = Number(selectedDoctor?.averageRating || 0);
+  const reviewCount = Number(selectedDoctor?.reviewCount || 0);
+  const ratingLabel = reviewCount > 0
+    ? `${averageRating.toFixed(1)} / 5.0 from ${reviewCount} patient rating${reviewCount === 1 ? "" : "s"}`
+    : "No patient ratings yet";
+  const publicReviews = selectedDoctor?.publicReviews || [];
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const patientReviewIds = new Set((patientReviews || []).map((review) => String(review.id || review._id || "")));
+  const ownName = [currentPatient?.firstName, currentPatient?.lastName].filter(Boolean).join(" ").trim();
+  const visibleReviews = (showAllReviews ? publicReviews : publicReviews.slice(0, 3)).map((review) => {
+    const isOwnReview = patientReviewIds.has(String(review.id));
+
+    return {
+      ...review,
+      patientName: isOwnReview && ownName ? `${ownName} (Your review)` : review.patientName,
+      isOwnReview,
+    };
+  });
+
+  useEffect(() => {
+    setShowAllReviews(false);
+  }, [doctorDetailOpen, selectedDoctor?.id, selectedDoctor?._id]);
 
   return (
     <div
@@ -47,6 +73,9 @@ export default function DoctorDetailModal({
                 >
                   {selectedDoctor.specialty || "General Practice"}
                 </p>
+                <p style={{ color: "#facc15", fontWeight: 600, margin: "8px 0 0 0", fontSize: "0.95rem" }}>
+                  Patient Rating: {ratingLabel}
+                </p>
               </div>
 
               <button
@@ -63,11 +92,11 @@ export default function DoctorDetailModal({
               style={{
                 padding: 20,
                 marginBottom: 24,
-                background: "rgba(15, 23, 42, 0.55)",
-                border: "1px solid rgba(0, 217, 255, 0.14)",
+                background: "rgba(244, 249, 250, 0.96)",
+                border: "1px solid rgba(47, 127, 141, 0.18)",
               }}
             >
-              <h4 style={{ margin: "0 0 16px 0", color: "white" }}>
+              <h4 style={{ margin: "0 0 16px 0", color: "var(--text-primary)" }}>
                 Doctor Profile
               </h4>
 
@@ -89,7 +118,7 @@ export default function DoctorDetailModal({
                   >
                     Specialization
                   </p>
-                  <p style={{ color: "white", fontWeight: 600, margin: 0 }}>
+                  <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>
                     {selectedDoctor.specialty || "Not provided"}
                   </p>
                 </div>
@@ -104,8 +133,23 @@ export default function DoctorDetailModal({
                   >
                     Experience
                   </p>
-                  <p style={{ color: "white", fontWeight: 600, margin: 0 }}>
+                  <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>
                     {selectedDoctor.yearsExperience ?? 0} years
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    style={{
+                      color: "var(--text-secondary)",
+                      fontSize: "0.85rem",
+                      margin: "0 0 6px 0",
+                    }}
+                  >
+                    Total Rating
+                  </p>
+                  <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>
+                    {ratingLabel}
                   </p>
                 </div>
 
@@ -119,7 +163,7 @@ export default function DoctorDetailModal({
                   >
                     License Number
                   </p>
-                  <p style={{ color: "white", fontWeight: 600, margin: 0 }}>
+                  <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>
                     {selectedDoctor.licenseNumber || "Not provided"}
                   </p>
                 </div>
@@ -134,7 +178,7 @@ export default function DoctorDetailModal({
                   >
                     Working Hours
                   </p>
-                  <p style={{ color: "white", fontWeight: 600, margin: 0 }}>
+                  <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>
                     {selectedDoctor.startTime || "09:00"} -{" "}
                     {selectedDoctor.endTime || "17:00"}
                   </p>
@@ -151,13 +195,52 @@ export default function DoctorDetailModal({
                 >
                   About the Doctor
                 </p>
-                <p style={{ color: "white", margin: 0, lineHeight: 1.6 }}>
+                <p style={{ color: "var(--text-primary)", margin: 0, lineHeight: 1.6 }}>
                   {selectedDoctor.bio || "No doctor bio has been added yet."}
                 </p>
               </div>
             </div>
 
-            <h4 style={{ margin: "0 0 16px 0", color: "white" }}>
+            <div
+              className="glass-card"
+              style={{
+                padding: 20,
+                marginBottom: 24,
+                background: "rgba(250, 252, 253, 0.98)",
+                border: "1px solid rgba(184, 133, 50, 0.18)",
+              }}
+            >
+              <h4 style={{ margin: "0 0 16px 0", color: "var(--text-primary)" }}>Patient Reviews</h4>
+              {publicReviews.length === 0 ? (
+                <p style={{ color: "var(--text-secondary)", margin: 0 }}>No public reviews yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 14 }}>
+                  {visibleReviews.map((review) => (
+                    <div key={review.id} style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12 }}>
+                      <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>{review.patientName}</p>
+                      <p style={{ color: "#facc15", fontWeight: 700, margin: "4px 0" }}>
+                        {Number(review.rating).toFixed(1)} / 5.0
+                      </p>
+                      <p style={{ color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>
+                        {review.comment || "No written comment provided."}
+                      </p>
+                    </div>
+                  ))}
+                  {publicReviews.length > 3 ? (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: "8px 12px", fontSize: "0.85rem" }}
+                      onClick={() => setShowAllReviews((value) => !value)}
+                    >
+                      {showAllReviews ? "Show fewer reviews" : "View all reviews"}
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <h4 style={{ margin: "0 0 16px 0", color: "var(--text-primary)" }}>
               Available Time Slots
             </h4>
 
@@ -193,7 +276,7 @@ export default function DoctorDetailModal({
                   style={{
                     display: "block",
                     fontWeight: 600,
-                    color: "white",
+                    color: "var(--text-primary)",
                     marginBottom: 6,
                     fontSize: "0.85rem",
                   }}
@@ -217,7 +300,7 @@ export default function DoctorDetailModal({
                   style={{
                     display: "block",
                     fontWeight: 600,
-                    color: "white",
+                    color: "var(--text-primary)",
                     marginBottom: 6,
                     fontSize: "0.85rem",
                   }}
@@ -240,7 +323,7 @@ export default function DoctorDetailModal({
                   style={{
                     display: "block",
                     fontWeight: 600,
-                    color: "white",
+                    color: "var(--text-primary)",
                     marginBottom: 6,
                     fontSize: "0.85rem",
                   }}
@@ -263,7 +346,7 @@ export default function DoctorDetailModal({
                   style={{
                     display: "block",
                     fontWeight: 600,
-                    color: "white",
+                    color: "var(--text-primary)",
                     marginBottom: 6,
                     fontSize: "0.85rem",
                   }}
@@ -286,11 +369,11 @@ export default function DoctorDetailModal({
                   marginBottom: 20,
                   padding: 14,
                   borderRadius: 12,
-                  background: "rgba(34, 197, 94, 0.08)",
-                  border: "1px solid rgba(34, 197, 94, 0.2)",
+                  background: "rgba(232, 245, 238, 0.96)",
+                  border: "1px solid rgba(87, 154, 117, 0.22)",
                 }}
               >
-                <p style={{ margin: 0, color: "#bbf7d0", fontSize: "0.9rem" }}>
+                <p style={{ margin: 0, color: "#2f6b46", fontSize: "0.9rem", fontWeight: 600 }}>
                   After booking, you will receive an on-screen confirmation with
                   the appointment details.
                 </p>

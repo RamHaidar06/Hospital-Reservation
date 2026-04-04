@@ -41,7 +41,7 @@ borderRadius:"10px"
 
 <p>{review.comment}</p>
 
-<p>Rating: {review.rating}/5</p>
+<p>Rating: {Number(review.rating || 0).toFixed(1)}/5.0</p>
 
 <small>{new Date(review.createdAt).toLocaleDateString()}</small>
 

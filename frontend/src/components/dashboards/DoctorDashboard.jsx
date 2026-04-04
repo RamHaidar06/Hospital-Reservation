@@ -18,21 +18,21 @@ function AppointmentSection({ title, count, color, defaultOpen = false, children
           justifyContent: "space-between",
           alignItems: "center",
           padding: "14px 18px",
-          background: "rgba(0,217,255,0.04)",
-          border: `1px solid ${color}33`,
+          background: "rgba(237, 246, 247, 0.9)",
+          border: `1px solid ${color}44`,
           borderRadius: open ? "10px 10px 0 0" : 10,
           cursor: "pointer",
           transition: "background 0.15s",
         }}
-        onMouseOver={(e) => e.currentTarget.style.background = "rgba(0,217,255,0.08)"}
-        onMouseOut={(e)  => e.currentTarget.style.background = "rgba(0,217,255,0.04)"}
+        onMouseOver={(e) => e.currentTarget.style.background = "rgba(228, 242, 243, 1)"}
+        onMouseOut={(e)  => e.currentTarget.style.background = "rgba(237, 246, 247, 0.9)"}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{
             display: "inline-block", width: 10, height: 10,
             borderRadius: "50%", background: color, flexShrink: 0,
           }} />
-          <span style={{ color: "white", fontWeight: 700, fontSize: "1rem" }}>{title}</span>
+          <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "1rem" }}>{title}</span>
           <span style={{
             background: `${color}22`, color, border: `1px solid ${color}55`,
             borderRadius: 20, padding: "2px 10px", fontSize: "0.78rem", fontWeight: 700,
@@ -51,7 +51,7 @@ function AppointmentSection({ title, count, color, defaultOpen = false, children
           border: `1px solid ${color}33`, borderTop: "none",
           borderRadius: "0 0 10px 10px",
           padding: "12px 12px 4px 12px",
-          background: "rgba(0,0,0,0.15)",
+          background: "rgba(248, 252, 252, 0.96)",
         }}>
           {count === 0
             ? <p style={{ color: "var(--text-secondary)", padding: "8px 4px", margin: 0 }}>No {title.toLowerCase()} appointments.</p>
@@ -74,7 +74,7 @@ function DoctorApptCard({ appt, patient, isCompleted, isPending, saveVisitSummar
   return (
     <div className="glass-card" style={{ padding: 18, marginBottom: 10, borderLeft: `4px solid ${borderColor}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-        <p style={{ fontWeight: 600, margin: 0, color: "white" }}>
+        <p style={{ fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
           {patient?.firstName || "Patient"} {patient?.lastName || ""}
         </p>
 
@@ -154,16 +154,25 @@ export default function DoctorDashboard({
   const confirmed  = doctorAppointments.filter((a) => a.status === "confirmed");
   const pending    = doctorAppointments.filter((a) => a.status === "pending");
   const completed  = doctorAppointments.filter((a) => a.status === "completed");
+  const totalReviewCount = doctorReviews.length;
+  const averageReviewRating = totalReviewCount > 0
+    ? (doctorReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / totalReviewCount).toFixed(1)
+    : "0.0";
 
   return (
     <div className="w-full h-full flex flex-col">
       <header style={{
-        background: "linear-gradient(135deg, rgba(26,40,81,0.8), rgba(15,23,42,0.6))",
-        borderBottom: "1px solid rgba(0,217,255,0.1)",
+        background: "linear-gradient(135deg, rgba(92, 122, 148, 0.92), rgba(132, 154, 176, 0.9))",
+        borderBottom: "1px solid rgba(47, 127, 141, 0.12)",
         padding: "20px 32px", backdropFilter: "blur(15px)",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1400, margin: "0 auto" }}>
-          <h2 style={{ margin: 0, fontSize: "1.75rem" }}>Doctor Dashboard</h2>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.75rem", color: "#ffffff" }}>Doctor Dashboard</h2>
+            <p style={{ margin: "6px 0 0 0", color: "rgba(255,255,255,0.88)", fontWeight: 600 }}>
+              Welcome back, Dr. {currentDoctor.firstName || "Doctor"}
+            </p>
+          </div>
           <button onClick={logoutDoctor} className="btn-secondary" style={{ fontSize: "0.85rem", padding: "10px 20px" }}>Logout</button>
         </div>
       </header>
@@ -187,15 +196,21 @@ export default function DoctorDashboard({
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px,1fr))", gap: 24 }}>
               <div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>Full Name</p>
-                <p style={{ color: "white", fontWeight: 600, margin: 0, fontSize: "1.1rem" }}>Dr. {currentDoctor.firstName} {currentDoctor.lastName}</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0, fontSize: "1.1rem" }}>Dr. {currentDoctor.firstName} {currentDoctor.lastName}</p>
               </div>
               <div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>Specialty</p>
-                <p style={{ color: "white", fontWeight: 600, margin: 0 }}>{currentDoctor.specialty || "N/A"}</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>{currentDoctor.specialty || "N/A"}</p>
               </div>
               <div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>License</p>
-                <p style={{ color: "white", fontWeight: 600, margin: 0 }}>{currentDoctor.licenseNumber || "N/A"}</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>{currentDoctor.licenseNumber || "N/A"}</p>
+              </div>
+              <div>
+                <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>Total Reviews</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>
+                  {averageReviewRating} / 5.0 from {totalReviewCount} review{totalReviewCount === 1 ? "" : "s"}
+                </p>
               </div>
             </div>
           </div>
@@ -211,10 +226,11 @@ export default function DoctorDashboard({
               ].map(([label, value]) => (
                 <div key={value} style={{
                   display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: 12,
-                  alignItems: "center", padding: 16, background: "rgba(0,217,255,0.05)", borderRadius: 8,
+                  alignItems: "center", padding: 16, background: "rgba(237, 246, 247, 0.9)", borderRadius: 8,
+                  border: "1px solid rgba(47, 127, 141, 0.12)",
                 }}>
                   <input type="checkbox" className="checkbox-custom" checked={workingDaysDraft.has(value)} onChange={() => toggleWorkDay(value)} />
-                  <label style={{ color: "white", fontWeight: 500, margin: 0 }}>{label}</label>
+                  <label style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>{label}</label>
                   <input type="time" className="input-field" style={{ padding: 8 }} value={startTimeDraft} onChange={(e) => setStartTimeDraft(e.target.value)} />
                   <input type="time" className="input-field" style={{ padding: 8 }} value={endTimeDraft}   onChange={(e) => setEndTimeDraft(e.target.value)} />
                 </div>
@@ -222,7 +238,7 @@ export default function DoctorDashboard({
             </div>
             <button onClick={saveWorkingHours} className="btn-primary" style={{ marginTop: 24, padding: "14px 32px" }}>Save Working Hours</button>
 
-            <div style={{ borderTop: "1px solid rgba(0,217,255,0.1)", paddingTop: 32, marginTop: 32 }}>
+            <div style={{ borderTop: "1px solid rgba(47, 127, 141, 0.12)", paddingTop: 32, marginTop: 32 }}>
               <h3 style={{ marginTop: 0 }}>Available Time Slots (Preview)</h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 16, marginTop: 16 }}>
                 {doctorSlots.length === 0 ? (
@@ -238,10 +254,10 @@ export default function DoctorDashboard({
                     return (
                       <div key={`${slot.date}_${slot.time}`} className="glass-card" style={{
                         padding: 16, textAlign: "center",
-                        border: `1px solid ${isBooked ? "rgba(239,68,68,0.3)" : "rgba(0,217,255,0.2)"}`,
+                        border: `1px solid ${isBooked ? "rgba(239,68,68,0.22)" : "rgba(47,127,141,0.18)"}`,
                       }}>
                         <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", margin: 0 }}>{new Date(slot.date).toLocaleDateString()}</p>
-                        <p style={{ color: "white", fontWeight: 600, margin: "4px 0" }}>{slot.time}</p>
+                        <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: "4px 0" }}>{slot.time}</p>
                         <span className={`status-badge ${isBooked ? "status-busy" : "status-available"}`}>{isBooked ? "Booked" : "Available"}</span>
                       </div>
                     );
@@ -305,6 +321,12 @@ export default function DoctorDashboard({
         {doctorTab === "reviews" && (
           <div className="glass-card" style={{ padding: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 24 }}>My Reviews</h3>
+            <div className="glass-card" style={{ padding: 18, marginBottom: 20 }}>
+              <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>Total Review Summary</p>
+              <p style={{ margin: "8px 0 0 0", color: "var(--text-primary)", fontWeight: 700 }}>
+                {averageReviewRating} / 5.0 from {totalReviewCount} patient review{totalReviewCount === 1 ? "" : "s"}
+              </p>
+            </div>
             {isReviewsLoading ? (
               <p style={{ color: "var(--text-secondary)" }}>Loading reviews...</p>
             ) : isReviewsError ? (
@@ -316,10 +338,13 @@ export default function DoctorDashboard({
                 {doctorReviews.map((review) => (
                   <div key={review.id || review._id} className="glass-card" style={{ padding: 20, borderLeft: "4px solid var(--cyan-bright)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <p style={{ fontWeight: 600, margin: 0, color: "white" }}>
-                        {review.patient_id?.firstName || review.patient_id?.lastName
-                          ? `${review.patient_id?.firstName || ""} ${review.patient_id?.lastName || ""}`.trim()
-                          : "Anonymous Patient"}
+                      <p style={{ fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
+                        {review.patientDisplayName
+                          || (review.hideFromDoctor
+                            ? "Anonymous Patient"
+                            : review.patient_id?.firstName || review.patient_id?.lastName
+                            ? `${review.patient_id?.firstName || ""} ${review.patient_id?.lastName || ""}`.trim()
+                            : "Anonymous Patient")}
                       </p>
                       <p style={{ color: "#facc15", fontWeight: 700, margin: 0 }}>
                         {"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}

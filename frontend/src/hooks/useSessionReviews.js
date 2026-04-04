@@ -72,7 +72,6 @@ export default function useSessionReviews({
           setLoggedInDoctor(user);
           setLoggedInPatient(null);
           setDoctorTab("profile");
-          setPage("doctor");
           setWorkingDaysDraft(
             new Set((user.workingDays || "").split(",").filter(Boolean))
           );
@@ -82,7 +81,6 @@ export default function useSessionReviews({
           setLoggedInPatient(user);
           setLoggedInDoctor(null);
           setPatientTab("profile");
-          setPage("patient");
         }
 
         lastFetchedForId.current = String(user.id || user._id || "");

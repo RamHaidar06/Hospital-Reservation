@@ -1,5 +1,6 @@
 export default function AuthPage({
   page,
+  setPage,
   activeAuthRole,
   patientAuthView,
   doctorAuthView,
@@ -27,6 +28,14 @@ export default function AuthPage({
 }) {
   if (page !== "auth") return null;
 
+  function goToHomepage() {
+    setActiveAuthRole("patient");
+    setPatientAuthView("login");
+    setDoctorAuthView("login");
+    setPage("landing");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   return (
     <div
       id="auth-section"
@@ -34,7 +43,7 @@ export default function AuthPage({
         padding: "80px 24px",
         position: "relative",
         zIndex: 10,
-        background: "rgba(26, 40, 81, 0.3)",
+        background: "rgba(235, 244, 247, 0.34)",
       }}
     >
       <div className="max-w-md mx-auto">
@@ -66,7 +75,7 @@ export default function AuthPage({
 
                 <form onSubmit={handlePatientLoginSubmit}>
                   <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 8, fontSize: "0.9rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
                       Email
                     </label>
                     <input
@@ -80,7 +89,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 8, fontSize: "0.9rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
                       Password
                     </label>
                     <input
@@ -145,6 +154,10 @@ export default function AuthPage({
                     </button>
                   </p>
                 </div>
+
+                <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
+                  Go Back to Homepage
+                </button>
               </div>
             )}
 
@@ -160,7 +173,7 @@ export default function AuthPage({
                 <form onSubmit={handlePatientRegisterSubmit}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
                     <div>
-                      <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                      <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                         First Name
                       </label>
                       <input
@@ -173,7 +186,7 @@ export default function AuthPage({
                       />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                      <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                         Last Name
                       </label>
                       <input
@@ -188,7 +201,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Email
                     </label>
                     <input
@@ -202,7 +215,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Phone
                     </label>
                     <input
@@ -215,7 +228,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Date of Birth
                     </label>
                     <input
@@ -227,7 +240,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Password
                     </label>
                     <input
@@ -241,7 +254,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Confirm Password
                     </label>
                     <input
@@ -269,6 +282,10 @@ export default function AuthPage({
                     Login here
                   </button>
                 </p>
+
+                <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
+                  Go Back to Homepage
+                </button>
               </div>
             )}
 
@@ -283,7 +300,7 @@ export default function AuthPage({
 
                 <form onSubmit={handlePatientForgotSubmit}>
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 8, fontSize: "0.9rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
                       Email
                     </label>
                     <input
@@ -311,6 +328,10 @@ export default function AuthPage({
                     login
                   </button>
                 </p>
+
+                <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
+                  Go Back to Homepage
+                </button>
               </div>
             )}
           </>
@@ -344,7 +365,7 @@ export default function AuthPage({
 
                 <form onSubmit={handleDoctorLoginSubmit}>
                   <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 8, fontSize: "0.9rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
                       Email
                     </label>
                     <input
@@ -358,7 +379,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 8, fontSize: "0.9rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
                       Password
                     </label>
                     <input
@@ -423,6 +444,10 @@ export default function AuthPage({
                     </button>
                   </p>
                 </div>
+
+                <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
+                  Go Back to Homepage
+                </button>
               </div>
             )}
 
@@ -438,7 +463,7 @@ export default function AuthPage({
                 <form onSubmit={handleDoctorRegisterSubmit}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
                     <div>
-                      <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                      <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                         First Name
                       </label>
                       <input
@@ -451,7 +476,7 @@ export default function AuthPage({
                       />
                     </div>
                     <div>
-                      <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                      <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                         Last Name
                       </label>
                       <input
@@ -466,7 +491,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Email
                     </label>
                     <input
@@ -480,7 +505,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Specialty
                     </label>
                     <select
@@ -500,7 +525,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       License Number
                     </label>
                     <input
@@ -514,7 +539,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Years of Experience
                     </label>
                     <input
@@ -530,7 +555,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Password
                     </label>
                     <input
@@ -544,7 +569,7 @@ export default function AuthPage({
                   </div>
 
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 6, fontSize: "0.85rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, fontSize: "0.85rem" }}>
                       Confirm Password
                     </label>
                     <input
@@ -572,6 +597,10 @@ export default function AuthPage({
                     Login here
                   </button>
                 </p>
+
+                <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
+                  Go Back to Homepage
+                </button>
               </div>
             )}
 
@@ -586,7 +615,7 @@ export default function AuthPage({
 
                 <form onSubmit={handleDoctorForgotSubmit}>
                   <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: "block", fontWeight: 600, color: "white", marginBottom: 8, fontSize: "0.9rem" }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
                       Email
                     </label>
                     <input
@@ -614,6 +643,10 @@ export default function AuthPage({
                     login
                   </button>
                 </p>
+
+                <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
+                  Go Back to Homepage
+                </button>
               </div>
             )}
           </>

@@ -28,6 +28,18 @@ const reviewSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    hidePatientName: {
+      type: Boolean,
+      default: false,
+    },
+    hideFromPublic: {
+      type: Boolean,
+      default: false,
+    },
+    hideFromDoctor: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

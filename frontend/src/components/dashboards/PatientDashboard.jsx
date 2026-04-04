@@ -1,5 +1,21 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import VisitSummary from "./VisitSummary";
+
+function doctorDisplayName(doc) {
+  const name = [doc?.firstName, doc?.lastName].filter(Boolean).join(" ").trim();
+  return name ? `Dr. ${name}` : "Dr. Unknown";
+}
+
+function doctorRatingLabel(doc) {
+  const averageRating = Number(doc?.averageRating || 0);
+  const reviewCount = Number(doc?.reviewCount || 0);
+
+  if (reviewCount <= 0) {
+    return "No ratings yet";
+  }
+
+  return `${averageRating.toFixed(1)} / 5.0 (${reviewCount})`;
+}
 
 export default function PatientDashboard({
   page,
@@ -17,77 +33,207 @@ export default function PatientDashboard({
   cancelAppointment,
   confirmAppointment,
   isHistoryLoading = false,
-  isHistoryError   = false,
-  doctorReviews    = [],
+  isHistoryError = false,
+  doctorReviews = [],
   submitReview,
+  updateReviewVisibility,
   saveVisitSummary,
 }) {
+  const [doctorNameSearch, setDoctorNameSearch] = useState("");
+  const [selectedSpecialty, setSelectedSpecialty] = useState("all");
+  const [ratingSearch, setRatingSearch] = useState("");
+  const [minimumRating, setMinimumRating] = useState("all");
+
+  const specialtyOptions = useMemo(() => {
+    return Array.from(new Set((visibleDoctors || []).map((doc) => doc.specialty).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [visibleDoctors]);
+
+  const filteredDoctors = useMemo(() => {
+    const normalizedNameSearch = doctorNameSearch.trim().toLowerCase();
+    const normalizedRatingSearch = ratingSearch.trim().toLowerCase();
+    const ratingThreshold = minimumRating === "all" ? 0 : Number(minimumRating);
+
+    return [...visibleDoctors]
+      .filter((doc) => {
+        const averageRating = Number(doc.averageRating || 0);
+        const nameText = [doc.firstName, doc.lastName].filter(Boolean).join(" ").toLowerCase();
+        const ratingText = averageRating.toFixed(1);
+        const matchesName = !normalizedNameSearch || nameText.includes(normalizedNameSearch);
+        const matchesSpecialty = selectedSpecialty === "all" || doc.specialty === selectedSpecialty;
+        const matchesRatingSearch = !normalizedRatingSearch || ratingText.includes(normalizedRatingSearch);
+        const matchesRating = minimumRating === "all" || averageRating >= ratingThreshold;
+
+        return matchesName && matchesSpecialty && matchesRatingSearch && matchesRating;
+      })
+      .sort((a, b) => {
+        const ratingDiff = Number(b.averageRating || 0) - Number(a.averageRating || 0);
+        if (ratingDiff !== 0) return ratingDiff;
+
+        return doctorDisplayName(a).localeCompare(doctorDisplayName(b));
+      });
+  }, [doctorNameSearch, selectedSpecialty, ratingSearch, minimumRating, visibleDoctors]);
+
   if (page !== "patient" || !currentPatient) return null;
 
   return (
     <div className="w-full h-full flex flex-col">
-      <header style={{
-        background: "linear-gradient(135deg, rgba(26,40,81,0.8), rgba(15,23,42,0.6))",
-        borderBottom: "1px solid rgba(0,217,255,0.1)",
-        padding: "20px 32px",
-        backdropFilter: "blur(15px)",
-      }}>
+      <header
+        style={{
+          background: "linear-gradient(135deg, rgba(92, 122, 148, 0.92), rgba(132, 154, 176, 0.9))",
+          borderBottom: "1px solid rgba(47, 127, 141, 0.12)",
+          padding: "20px 32px",
+          backdropFilter: "blur(15px)",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 1400, margin: "0 auto" }}>
-          <h2 style={{ margin: 0, fontSize: "1.75rem" }}>Patient Dashboard</h2>
-          <button onClick={logoutPatient} className="btn-secondary" style={{ fontSize: "0.85rem", padding: "10px 20px" }}>Logout</button>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.75rem", color: "#ffffff" }}>Patient Dashboard</h2>
+            <p style={{ margin: "6px 0 0 0", color: "rgba(255,255,255,0.88)", fontWeight: 600 }}>
+              Welcome back, {currentPatient.firstName || "Patient"}
+            </p>
+          </div>
+          <button onClick={logoutPatient} className="btn-secondary" style={{ fontSize: "0.85rem", padding: "10px 20px" }}>
+            Logout
+          </button>
         </div>
       </header>
 
       <div className="tab-switch" style={{ maxWidth: 1400, margin: "32px auto", padding: "0 32px", width: "calc(100% - 64px)" }}>
-        <button className={`tab-btn ${patientTab === "profile"  ? "active" : ""}`} onClick={() => setPatientTab("profile")}>👤 Profile</button>
-        <button className={`tab-btn ${patientTab === "book"     ? "active" : ""}`} onClick={() => setPatientTab("book")}>📅 Book</button>
-        <button className={`tab-btn ${patientTab === "upcoming" ? "active" : ""}`} onClick={() => setPatientTab("upcoming")}>📆 Upcoming</button>
-        <button className={`tab-btn ${patientTab === "past"     ? "active" : ""}`} onClick={() => setPatientTab("past")}>📋 History</button>
+        <button className={`tab-btn ${patientTab === "profile" ? "active" : ""}`} onClick={() => setPatientTab("profile")}>
+          👤 Profile
+        </button>
+        <button className={`tab-btn ${patientTab === "book" ? "active" : ""}`} onClick={() => setPatientTab("book")}>
+          📅 Book
+        </button>
+        <button className={`tab-btn ${patientTab === "upcoming" ? "active" : ""}`} onClick={() => setPatientTab("upcoming")}>
+          🗓 Upcoming
+        </button>
+        <button className={`tab-btn ${patientTab === "past" ? "active" : ""}`} onClick={() => setPatientTab("past")}>
+          📋 History
+        </button>
       </div>
 
       <main className="flex-1 overflow-auto" style={{ padding: "0 32px 32px", maxWidth: 1400, margin: "0 auto", width: "100%" }}>
-
-        {/* ── PROFILE ── */}
         {patientTab === "profile" && (
           <div className="glass-card" style={{ padding: 32, marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
               <h3 style={{ margin: 0 }}>Your Profile</h3>
-              <button onClick={openEditPatient} className="btn-secondary" style={{ fontSize: "0.85rem" }}>Edit Profile</button>
+              <button onClick={openEditPatient} className="btn-secondary" style={{ fontSize: "0.85rem" }}>
+                Edit Profile
+              </button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px,1fr))", gap: 24 }}>
               <div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>Full Name</p>
-                <p style={{ color: "white", fontWeight: 600, margin: 0, fontSize: "1.1rem" }}>{currentPatient.firstName} {currentPatient.lastName}</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0, fontSize: "1.1rem" }}>
+                  {currentPatient.firstName} {currentPatient.lastName}
+                </p>
               </div>
               <div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>Email</p>
-                <p style={{ color: "white", fontWeight: 600, margin: 0 }}>{currentPatient.email}</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>{currentPatient.email}</p>
               </div>
               <div>
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 8px 0" }}>Phone</p>
-                <p style={{ color: "white", fontWeight: 600, margin: 0 }}>{currentPatient.phone || "Not set"}</p>
+                <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: 0 }}>{currentPatient.phone || "Not set"}</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── BOOK ── */}
         {patientTab === "book" && (
           <div className="glass-card" style={{ padding: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 24 }}>Book an Appointment</h3>
+
+            <div className="glass-card" style={{ padding: 20, marginBottom: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: 8, color: "var(--text-primary)", fontWeight: 700 }}>Name</label>
+                  <input
+                    className="input-field"
+                    type="text"
+                    placeholder="Search doctor name"
+                    value={doctorNameSearch}
+                    onChange={(event) => setDoctorNameSearch(event.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", marginBottom: 8, color: "var(--text-primary)", fontWeight: 700 }}>Specialty</label>
+                  <select
+                    className="input-field"
+                    value={selectedSpecialty}
+                    onChange={(event) => setSelectedSpecialty(event.target.value)}
+                  >
+                    <option value="all">All specialties</option>
+                    {specialtyOptions.map((specialty) => (
+                      <option key={specialty} value={specialty}>
+                        {specialty}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", marginBottom: 8, color: "var(--text-primary)", fontWeight: 700 }}>Rating</label>
+                  <input
+                    className="input-field"
+                    type="text"
+                    placeholder="Example: 4.5"
+                    value={ratingSearch}
+                    onChange={(event) => setRatingSearch(event.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", marginBottom: 8, color: "var(--text-primary)", fontWeight: 700 }}>Minimum rating</label>
+                  <select
+                    className="input-field"
+                    value={minimumRating}
+                    onChange={(event) => setMinimumRating(event.target.value)}
+                  >
+                    <option value="all">All ratings</option>
+                    <option value="4.5">4.5 and above</option>
+                    <option value="4">4.0 and above</option>
+                    <option value="3">3.0 and above</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             {visibleDoctors.length === 0 ? (
               <p style={{ color: "var(--text-secondary)" }}>No doctors available.</p>
+            ) : filteredDoctors.length === 0 ? (
+              <p style={{ color: "var(--text-secondary)" }}>No doctors match your search.</p>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px,1fr))", gap: 24 }}>
-                {visibleDoctors.map((doc) => (
-                  <div key={doc.id || doc._id} className="glass-card" style={{ padding: 24, cursor: "pointer" }} onClick={() => openDoctorDetails(doc.id || doc._id)}>
-                    <div style={{ fontSize: "2rem", marginBottom: 12 }}>⚕️</div>
-                    <h4 style={{ margin: "0 0 8px 0", color: "white" }}>Dr. {doc.lastName}</h4>
-                    <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 12px 0" }}>{doc.specialty || "specialty"}</p>
-                    <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 12px 0" }}>{doc.yearsExperience ?? 0}y exp.</p>
-                    <button className="btn-primary" style={{ width: "100%", padding: 10, fontSize: "0.9rem" }}
-                      onClick={(e) => { e.stopPropagation(); openDoctorDetails(doc.id || doc._id); }}>
-                      View Profile & Book
+                {filteredDoctors.map((doc) => (
+                  <div
+                    key={doc.id || doc._id}
+                    className="glass-card"
+                    style={{ padding: 24, cursor: "pointer" }}
+                    onClick={() => openDoctorDetails(doc.id || doc._id)}
+                  >
+                    <div style={{ fontSize: "2rem", marginBottom: 12 }}>Doctor</div>
+                    <h4 style={{ margin: "0 0 8px 0", color: "var(--text-primary)" }}>{doctorDisplayName(doc)}</h4>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 12px 0" }}>
+                      {doc.specialty || "Specialty not listed"}
+                    </p>
+                    <p style={{ color: "#facc15", fontSize: "0.92rem", margin: "0 0 12px 0", fontWeight: 700 }}>
+                      Patient Rating: {doctorRatingLabel(doc)}
+                    </p>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 12px 0" }}>
+                      {doc.yearsExperience ?? 0}y exp.
+                    </p>
+                    <button
+                      className="btn-primary"
+                      style={{ width: "100%", padding: 10, fontSize: "0.9rem" }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openDoctorDetails(doc.id || doc._id);
+                      }}
+                    >
+                      View Profile and Book
                     </button>
                   </div>
                 ))}
@@ -96,7 +242,6 @@ export default function PatientDashboard({
           </div>
         )}
 
-        {/* ── UPCOMING ── */}
         {patientTab === "upcoming" && (
           <div className="glass-card" style={{ padding: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 24 }}>Upcoming Appointments</h3>
@@ -108,9 +253,8 @@ export default function PatientDashboard({
                   const doc =
                     appt.doctorId && typeof appt.doctorId === "object"
                       ? appt.doctorId
-                      : (allData.doctors || []).find(
-                          (d) => String(d.id || d._id) === String(appt.doctorId)
-                        );
+                      : (allData.doctors || []).find((d) => String(d.id || d._id) === String(appt.doctorId));
+
                   return (
                     <UpcomingAppointmentCard
                       key={appt.id || appt._id}
@@ -127,7 +271,6 @@ export default function PatientDashboard({
           </div>
         )}
 
-        {/* ── HISTORY ── */}
         {patientTab === "past" && (
           <div className="glass-card" style={{ padding: 32 }}>
             <h3 style={{ marginTop: 0, marginBottom: 24 }}>Appointment History</h3>
@@ -144,25 +287,24 @@ export default function PatientDashboard({
                   const doc =
                     appt.doctorId && typeof appt.doctorId === "object"
                       ? appt.doctorId
-                      : (allData.doctors || []).find(
-                          (d) => String(d.id || d._id) === String(appt.doctorId)
-                        );
+                      : (allData.doctors || []).find((d) => String(d.id || d._id) === String(appt.doctorId));
                   const reviewDoctorId =
                     typeof appt.doctorId === "string"
                       ? appt.doctorId
                       : appt.doctorId?._id || appt.doctorId?.id || doc?.id || doc?._id;
                   const existingReview = doctorReviews.find((review) => {
-                    const rid = typeof review.appointment_id === "string"
-                      ? review.appointment_id
-                      : review.appointment_id?._id || review.appointment_id?.id;
+                    const rid =
+                      typeof review.appointment_id === "string"
+                        ? review.appointment_id
+                        : review.appointment_id?._id || review.appointment_id?.id;
                     return String(rid) === String(appointmentId);
                   });
 
                   return (
                     <div key={appointmentId} className="glass-card" style={{ padding: 20 }}>
-                      <p style={{ fontWeight: 600, margin: 0, color: "white" }}>Dr. {doc?.lastName || "Unknown"}</p>
+                      <p style={{ fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>{doctorDisplayName(doc)}</p>
                       <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "4px 0" }}>
-                        📅 {new Date(appt.appointmentDate).toLocaleDateString()} at {appt.appointmentTime}
+                        {new Date(appt.appointmentDate).toLocaleDateString()} at {appt.appointmentTime}
                       </p>
                       <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "4px 0" }}>{appt.reason}</p>
                       {appt.notes ? (
@@ -180,14 +322,19 @@ export default function PatientDashboard({
                       <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(0,217,255,0.1)" }}>
                         {existingReview ? (
                           <div>
-                            <p style={{ color: "white", fontWeight: 600, margin: "0 0 8px 0" }}>Your Review</p>
+                            <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: "0 0 8px 0" }}>Your Review</p>
                             <p style={{ color: "#facc15", fontWeight: 700, margin: "0 0 8px 0" }}>
-                              {"★".repeat(existingReview.rating)}{"☆".repeat(5 - existingReview.rating)}
+                              {"*".repeat(existingReview.rating)}{"-".repeat(5 - existingReview.rating)}
                             </p>
                             <p style={{ color: "var(--text-secondary)", margin: 0 }}>{existingReview.comment || "No comment provided."}</p>
+                            <ReviewVisibilityEditor
+                              review={existingReview}
+                              doctorId={reviewDoctorId}
+                              updateReviewVisibility={updateReviewVisibility}
+                            />
                           </div>
                         ) : (
-                            <ReviewForm doctorId={reviewDoctorId} appointmentId={appointmentId} submitReview={submitReview} />
+                          <ReviewForm doctorId={reviewDoctorId} appointmentId={appointmentId} submitReview={submitReview} />
                         )}
                       </div>
                     </div>
@@ -202,23 +349,22 @@ export default function PatientDashboard({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UpcomingAppointmentCard — handles Confirm button + too-early popup
-// ─────────────────────────────────────────────────────────────────────────────
 function UpcomingAppointmentCard({ appt, doc, rescheduleAppointment, cancelAppointment, confirmAppointment }) {
-  const [popup, setPopup]       = useState(null);  // { open, windowOpen, windowClose }
+  const [popup, setPopup] = useState(null);
   const [confirming, setConfirming] = useState(false);
 
-  const apptId    = appt.id || appt._id;
-  const isPending   = appt.status === "pending";
+  const apptId = appt.id || appt._id;
+  const isPending = appt.status === "pending";
   const isConfirmed = appt.status === "confirmed";
-
   const borderColor = isPending ? "#f59e0b" : isConfirmed ? "var(--cyan-bright)" : "var(--text-secondary)";
 
   const fmtTime = (iso) => {
     if (!iso) return "";
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
-      " on " + new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+    return (
+      new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) +
+      " on " +
+      new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" })
+    );
   };
 
   async function handleConfirm() {
@@ -226,24 +372,18 @@ function UpcomingAppointmentCard({ appt, doc, rescheduleAppointment, cancelAppoi
     try {
       await confirmAppointment(apptId);
     } catch (err) {
-      // Parse the error message from the API
-      let msg = err.message || "";
-      // Try to parse JSON body if available
+      const msg = err.message || "";
       try {
         const parsed = JSON.parse(err.message);
         if (parsed.tooEarly) {
           setPopup({ open: true, windowOpen: parsed.windowOpen, windowClose: parsed.windowClose, message: parsed.message });
           return;
         }
-      } catch { /* not JSON — use raw message */ }
+      } catch {}
 
-      // If message contains window info from server text
       if (msg.includes("between")) {
         setPopup({ open: true, message: msg });
-        return;
       }
-
-      // Generic error — already shown by showMessage in hook if it reaches here
     } finally {
       setConfirming(false);
     }
@@ -251,34 +391,41 @@ function UpcomingAppointmentCard({ appt, doc, rescheduleAppointment, cancelAppoi
 
   return (
     <div className="glass-card" style={{ padding: 20, borderLeft: `4px solid ${borderColor}`, position: "relative" }}>
-      {/* Too-early popup */}
       {popup?.open && (
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(10,15,30,0.85)", borderRadius: 10,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 10, padding: 24,
-        }}>
-          <div style={{
-            background: "rgba(26,40,81,0.98)", border: "1px solid rgba(245,158,11,0.4)",
-            borderRadius: 10, padding: 24, maxWidth: 360, textAlign: "center",
-          }}>
-            <p style={{ fontSize: "1.3rem", margin: "0 0 12px 0" }}>⏰</p>
-            <p style={{ color: "white", fontWeight: 700, margin: "0 0 10px 0" }}>
-              Not yet time to confirm
-            </p>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(10,15,30,0.85)",
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(26,40,81,0.98)",
+              border: "1px solid rgba(245,158,11,0.4)",
+              borderRadius: 10,
+              padding: 24,
+              maxWidth: 360,
+              textAlign: "center",
+            }}
+          >
+            <p style={{ color: "white", fontWeight: 700, margin: "0 0 10px 0" }}>Not yet time to confirm</p>
             <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "0 0 16px 0", lineHeight: 1.6 }}>
-              {popup.message || (
-                popup.windowOpen && popup.windowClose
+              {popup.message ||
+                (popup.windowOpen && popup.windowClose
                   ? `Please confirm your appointment between ${fmtTime(popup.windowOpen)} and ${fmtTime(popup.windowClose)}.`
-                  : "Confirmation window not yet open."
-              )}
+                  : "Confirmation window not yet open.")}
             </p>
-            <button
-              onClick={() => setPopup(null)}
-              className="btn-primary"
-              style={{ padding: "8px 24px", fontSize: "0.9rem" }}
-            >
+            <button onClick={() => setPopup(null)} className="btn-primary" style={{ padding: "8px 24px", fontSize: "0.9rem" }}>
               OK
             </button>
           </div>
@@ -286,39 +433,51 @@ function UpcomingAppointmentCard({ appt, doc, rescheduleAppointment, cancelAppoi
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-        <p style={{ fontWeight: 600, margin: 0, color: "white" }}>Dr. {doc?.lastName || "Unknown"}</p>
+        <p style={{ fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>{doctorDisplayName(doc)}</p>
 
-        {/* Confirm button — only on pending appointments */}
         {isPending && (
           <button
             onClick={handleConfirm}
             disabled={confirming}
             style={{
-              fontSize: "0.78rem", fontWeight: 700, padding: "5px 14px",
-              borderRadius: 6, border: "1px solid rgba(245,158,11,0.4)",
-              background: "rgba(245,158,11,0.12)", color: "#f59e0b",
-              cursor: "pointer", whiteSpace: "nowrap",
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              padding: "5px 14px",
+              borderRadius: 6,
+              border: "1px solid rgba(245,158,11,0.4)",
+              background: "rgba(245,158,11,0.12)",
+              color: "#f59e0b",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
               transition: "background 0.15s",
             }}
-            onMouseOver={(e) => e.currentTarget.style.background = "rgba(245,158,11,0.22)"}
-            onMouseOut={(e)  => e.currentTarget.style.background = "rgba(245,158,11,0.12)"}
+            onMouseOver={(event) => {
+              event.currentTarget.style.background = "rgba(245,158,11,0.22)";
+            }}
+            onMouseOut={(event) => {
+              event.currentTarget.style.background = "rgba(245,158,11,0.12)";
+            }}
           >
-            {confirming ? "Confirming..." : "✓ Confirm"}
+            {confirming ? "Confirming..." : "Confirm"}
           </button>
         )}
       </div>
 
       <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "4px 0" }}>
-        📅 {new Date(appt.appointmentDate).toLocaleDateString()} at {appt.appointmentTime}
+        {new Date(appt.appointmentDate).toLocaleDateString()} at {appt.appointmentTime}
       </p>
       <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "4px 0" }}>{appt.reason}</p>
 
-      {/* Status badge */}
-      <p style={{
-        fontSize: "0.82rem", fontWeight: 700, letterSpacing: "0.08em",
-        textTransform: "uppercase", margin: "6px 0 12px 0",
-        color: isPending ? "#f59e0b" : "var(--cyan-bright)",
-      }}>
+      <p
+        style={{
+          fontSize: "0.82rem",
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          margin: "6px 0 12px 0",
+          color: isPending ? "#f59e0b" : "var(--cyan-bright)",
+        }}
+      >
         {appt.status}
       </p>
 
@@ -334,34 +493,39 @@ function UpcomingAppointmentCard({ appt, doc, rescheduleAppointment, cancelAppoi
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ReviewForm
-// ─────────────────────────────────────────────────────────────────────────────
 function ReviewForm({ doctorId, appointmentId, submitReview }) {
-  const [rating,  setRating]  = React.useState(5);
+  const [rating, setRating] = React.useState(5);
   const [comment, setComment] = React.useState("");
+  const [hideFromPublic, setHideFromPublic] = React.useState(false);
+  const [hideFromDoctor, setHideFromDoctor] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
     setMessage("");
     try {
-      const normalizedDoctorId =
-        typeof doctorId === "string"
-          ? doctorId
-          : doctorId?._id || doctorId?.id;
+      const normalizedDoctorId = typeof doctorId === "string" ? doctorId : doctorId?._id || doctorId?.id;
 
       if (!normalizedDoctorId) {
         setMessage("Could not identify doctor for this appointment.");
         return;
       }
 
-      await submitReview({ doctor_id: normalizedDoctorId, appointment_id: appointmentId, rating: Number(rating), comment });
+      await submitReview({
+        doctor_id: normalizedDoctorId,
+        appointment_id: appointmentId,
+        rating: Number(rating),
+        comment,
+        hideFromPublic,
+        hideFromDoctor,
+      });
       setMessage("Review submitted successfully.");
       setComment("");
       setRating(5);
+      setHideFromPublic(false);
+      setHideFromDoctor(false);
     } catch (error) {
       setMessage(error.message || "Failed to submit review.");
     } finally {
@@ -371,10 +535,10 @@ function ReviewForm({ doctorId, appointmentId, submitReview }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <p style={{ color: "white", fontWeight: 600, margin: "0 0 12px 0" }}>Leave a Review</p>
+      <p style={{ color: "var(--text-primary)", fontWeight: 700, margin: "0 0 12px 0" }}>Leave a Review</p>
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: "block", color: "var(--text-secondary)", marginBottom: 6 }}>Rating</label>
-        <select value={rating} onChange={(e) => setRating(e.target.value)} className="input-field" style={{ padding: 10, width: "100%" }}>
+        <select value={rating} onChange={(event) => setRating(event.target.value)} className="input-field" style={{ padding: 10, width: "100%" }}>
           <option value={5}>5 - Excellent</option>
           <option value={4}>4 - Very Good</option>
           <option value={3}>3 - Good</option>
@@ -384,13 +548,89 @@ function ReviewForm({ doctorId, appointmentId, submitReview }) {
       </div>
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: "block", color: "var(--text-secondary)", marginBottom: 6 }}>Comment</label>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write your feedback..."
-          className="input-field" style={{ width: "100%", minHeight: 100, padding: 12, resize: "vertical" }} />
+        <textarea
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+          placeholder="Write your feedback..."
+          className="input-field"
+          style={{ width: "100%", minHeight: 100, padding: 12, resize: "vertical" }}
+        />
       </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-secondary)", marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={hideFromPublic}
+          onChange={(event) => setHideFromPublic(event.target.checked)}
+          style={{ width: 16, height: 16, accentColor: "var(--cyan-bright)" }}
+        />
+        Blur my name for other patients and landing page viewers
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-secondary)", marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={hideFromDoctor}
+          onChange={(event) => setHideFromDoctor(event.target.checked)}
+          style={{ width: 16, height: 16, accentColor: "var(--cyan-bright)" }}
+        />
+        Blur my name for the doctor too
+      </label>
       <button type="submit" className="btn-primary" style={{ padding: "10px 18px" }} disabled={loading}>
         {loading ? "Submitting..." : "Submit Review"}
       </button>
       {message ? <p style={{ color: "var(--text-secondary)", marginTop: 10 }}>{message}</p> : null}
     </form>
+  );
+}
+
+function ReviewVisibilityEditor({ review, doctorId, updateReviewVisibility }) {
+  const [hideFromPublic, setHideFromPublic] = React.useState(Boolean(review.hideFromPublic ?? review.hidePatientName));
+  const [hideFromDoctor, setHideFromDoctor] = React.useState(Boolean(review.hideFromDoctor));
+  const [loading, setLoading] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+
+  async function handleSave() {
+    setLoading(true);
+    setMessage("");
+    try {
+      await updateReviewVisibility({
+        reviewId: review.id || review._id,
+        doctorId,
+        hideFromPublic,
+        hideFromDoctor,
+      });
+      setMessage("Visibility updated.");
+    } catch (error) {
+      setMessage(error.message || "Failed to update visibility.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="glass-card" style={{ padding: 14, marginTop: 14 }}>
+      <p style={{ margin: "0 0 10px 0", color: "var(--text-primary)", fontWeight: 700 }}>Name visibility</p>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-secondary)", marginBottom: 10, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={hideFromPublic}
+          onChange={(event) => setHideFromPublic(event.target.checked)}
+          style={{ width: 16, height: 16, accentColor: "var(--cyan-bright)" }}
+        />
+        Blur my name for other patients and landing page viewers
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-secondary)", marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={hideFromDoctor}
+          onChange={(event) => setHideFromDoctor(event.target.checked)}
+          style={{ width: 16, height: 16, accentColor: "var(--cyan-bright)" }}
+        />
+        Blur my name for the doctor
+      </label>
+      <button type="button" className="btn-secondary" style={{ padding: "8px 14px", fontSize: "0.85rem" }} onClick={handleSave} disabled={loading}>
+        {loading ? "Saving..." : "Save Visibility"}
+      </button>
+      {message ? <p style={{ color: "var(--text-secondary)", margin: "10px 0 0 0" }}>{message}</p> : null}
+    </div>
   );
 }
