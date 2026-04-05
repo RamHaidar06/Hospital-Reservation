@@ -477,14 +477,103 @@ async function findAppointmentCandidate(userId, role, parsed, rawMessage) {
   return { ambiguous: appointments.length > 1, appointments };
 }
 
-async function extractIntentWithGemini({ message, history, userRole, userName, doctors, appointments }) {
-  if (!geminiClient) {
-    return {
-      intent: "chat",
-      reply: "Gemini is not configured right now.",
-    };
+function extractBookingReasonFromMessage(message) {
+  const text = String(message || "").trim();
+  if (!text) return null;
+
+  const byReason = text.match(/\b(?:reason|because|for)\b\s*[:\-]?\s*(.+)$/i);
+  if (byReason) {
+    const candidate = String(byReason[1] || "").trim();
+    if (candidate && !isTemporalOnlyText(candidate)) return candidate;
   }
 
+  return null;
+}
+
+function extractDoctorQueryFromMessage(message) {
+  const text = String(message || "").trim();
+  if (!text) return null;
+
+  const withDoctor = text.match(/\bwith\s+(?:dr\.?\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i);
+  if (withDoctor) return String(withDoctor[1] || "").trim();
+
+  const inferred = inferSpecialty(text);
+  if (inferred) return inferred;
+
+  return null;
+}
+
+function extractIntentLocally({ message, history, userRole }) {
+  const text = String(message || "").trim();
+  const lower = text.toLowerCase();
+
+  const parsedDate = parseNaturalDate(text);
+  const parsedTime = parseNaturalTime(text);
+  const visitSummary = extractSummaryTextFromMessage(text) || null;
+  const patientQuery = extractPatientQueryFromMessage(text) || null;
+  const doctorQuery = extractDoctorQueryFromMessage(text);
+  const bookingReason = extractBookingReasonFromMessage(text);
+
+  let intent = "chat";
+  if (detectVisitSummaryQuery(text, history)) intent = "visit_summary_query";
+  else if (userRole === "doctor" && detectVisitSummaryIntent(text)) intent = "add_visit_summary";
+  else if (userRole === "doctor" && detectCancelByPatientIntent(text)) intent = "cancel_by_patient";
+  else if (detectReasonQuery(text, history)) intent = "reason_query";
+  else if (/\b(help|what can you do|capabilities|options)\b/.test(lower)) intent = "help";
+  else if (/\b(reschedule|change|move)\b/.test(lower)) intent = "reschedule";
+  else if (/\b(cancel|remove|delete)\b/.test(lower) && /\bappointment\b/.test(lower)) intent = "cancel";
+  else if (/\b(book|schedule|new appointment|make appointment)\b/.test(lower)) intent = "book";
+  else if (/\bappointments?\b|\bschedule\b|\btoday\b|\btomorrow\b|\bupcoming\b|\bcompleted\b|\bpending\b/.test(lower)) intent = "list_appointments";
+  else if (/\bdoctor\b|\bspecialty\b|\bcardio|derma|neuro|pedia|ortho|gastro\b/.test(lower)) intent = "doctor_info";
+
+  return {
+    intent,
+    reply: null,
+    doctorQuery: doctorQuery || null,
+    doctorId: null,
+    appointmentId: null,
+    appointmentDate: parsedDate || null,
+    appointmentTime: parsedTime || null,
+    newAppointmentDate: intent === "reschedule" ? parsedDate || null : null,
+    newAppointmentTime: intent === "reschedule" ? parsedTime || null : null,
+    reason: bookingReason || null,
+    notes: null,
+    visitSummary,
+    patientQuery,
+    clarification: null,
+    engine: "local",
+  };
+}
+
+async function extractIntentSmart({ message, history, userRole, userName, doctors, appointments }) {
+  if (!geminiClient) {
+    return extractIntentLocally({ message, history, userRole });
+  }
+
+  try {
+    const extracted = await extractIntentWithGemini({
+      message,
+      history: history
+        .slice(-8)
+        .map((item) => `${item.role || item.type || "user"}: ${item.text || ""}`)
+        .join("\n"),
+      userRole,
+      userName,
+      doctors,
+      appointments,
+    });
+
+    return {
+      ...extracted,
+      engine: "gemini",
+    };
+  } catch (error) {
+    console.warn("Gemini unavailable, using local fallback:", error?.message || error);
+    return extractIntentLocally({ message, history, userRole });
+  }
+}
+
+async function extractIntentWithGemini({ message, history, userRole, userName, doctors, appointments }) {
   const prompt = [
     "You are the AI assistant for a medical appointment website.",
     "Return strict JSON only, no markdown, no code fences.",
@@ -600,21 +689,14 @@ async function chatWithGemini(req, res) {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    if (!geminiClient) {
-      return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
-    }
-
     const doctors = await getDoctors();
     const appointments = await getAppointmentsForUser(req.user.userId, userRole === "doctor" ? "doctor" : "patient");
     const doctorSummary = doctors.slice(0, 10).map(formatDoctorSummary).join("\n");
     const appointmentSummary = appointments.slice(0, 10).map(formatAppointmentSummary).join("\n");
 
-    const extracted = await extractIntentWithGemini({
+    const extracted = await extractIntentSmart({
       message,
-      history: history
-        .slice(-8)
-        .map((item) => `${item.role || item.type || "user"}: ${item.text || ""}`)
-        .join("\n"),
+      history,
       userRole,
       userName,
       doctors: doctorSummary,
