@@ -69,7 +69,7 @@ export default function AppointmentChatbot({ loggedInPatient, loggedInDoctor, is
           e.target.style.transform = "scale(1)";
           e.target.style.boxShadow = "0 8px 24px rgba(14, 165, 233, 0.4)";
         }}
-        title="Healthcare Assistant"
+          title="Gemini Secretary"
       >
         💬
       </button>
@@ -120,7 +120,7 @@ export default function AppointmentChatbot({ loggedInPatient, loggedInDoctor, is
                   color: "#fff",
                 }}
               >
-                💊 {userRole === "doctor" ? "Doctor Assistant" : "Patient Assistant"}
+                🤖 Gemini Secretary
               </h3>
               <p
                 style={{
@@ -129,7 +129,7 @@ export default function AppointmentChatbot({ loggedInPatient, loggedInDoctor, is
                   color: "var(--text-secondary)",
                 }}
               >
-                Always here to help
+                Powered by Gemini
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>

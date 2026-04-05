@@ -21,11 +21,11 @@ app.use("/api/appointments", apptRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/reviews", reviewRoutes);
 
-app.get("/api/chatbot/health", chatbotController.healthCheck);
 app.post("/api/chatbot/suggest-doctors", chatbotController.suggestDoctors);
 app.get("/api/chatbot/doctors/:doctorId", chatbotController.getDoctorDetails);
 app.post("/api/chatbot/doctors/:doctorId/available-slots", chatbotController.getAvailableSlots);
 app.get("/api/chatbot/my-appointments", auth, chatbotController.getMyAppointments);
+app.post("/api/chat", auth, chatbotController.chatWithGemini);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
