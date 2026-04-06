@@ -102,21 +102,30 @@ function parseNaturalDate(input) {
   const raw = String(input || "").trim().toLowerCase();
   if (!raw) return null;
 
+  const dateOnly = raw
+    .replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(am|pm)?\b/g, "")
+    .replace(/\b\d{1,2}(?::\d{2})?\s*(am|pm)\b/g, "")
+    .replace(/\b\d{1,2}:\d{2}\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!dateOnly) return null;
+
   const now = new Date();
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  if (raw === "today") return toIsoDate(base);
-  if (raw === "tomorrow") {
+  if (dateOnly === "today" || /\btoday\b/.test(dateOnly)) return toIsoDate(base);
+  if (dateOnly === "tomorrow" || /\btomorrow\b|\btmrw\b|\btmr\b/.test(dateOnly)) {
     base.setDate(base.getDate() + 1);
     return toIsoDate(base);
   }
-  if (raw === "next week") {
+  if (dateOnly === "next week" || /\bnext\s+week\b/.test(dateOnly)) {
     base.setDate(base.getDate() + 7);
     return toIsoDate(base);
   }
 
   const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const nextWeekdayMatch = raw.match(/^(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)$/);
+  const nextWeekdayMatch = dateOnly.match(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
   if (nextWeekdayMatch) {
     const target = weekdays.indexOf(nextWeekdayMatch[2]);
     const current = base.getDay();
@@ -126,14 +135,14 @@ function parseNaturalDate(input) {
     return toIsoDate(base);
   }
 
-  const normalized = raw.replace(/\//g, "-");
+  const normalized = dateOnly.replace(/\//g, "-");
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
     const [y, m, d] = normalized.split("-").map(Number);
     const date = new Date(y, m - 1, d);
     if (!Number.isNaN(date.getTime())) return toIsoDate(date);
   }
 
-  const parsed = new Date(raw);
+  const parsed = new Date(dateOnly || raw);
   return Number.isNaN(parsed.getTime()) ? null : toIsoDate(parsed);
 }
 
@@ -238,6 +247,95 @@ function detectListMode(message) {
   return "all";
 }
 
+function formatListAsSentence(items = []) {
+  const clean = items
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+
+  if (!clean.length) return "";
+  if (clean.length === 1) return clean[0];
+  if (clean.length === 2) return `${clean[0]} and ${clean[1]}`;
+  return `${clean.slice(0, -1).join(", ")}, and ${clean[clean.length - 1]}`;
+}
+
+function toPoliteClarification(clarification, fallbackQuestion) {
+  const raw = String(clarification || "").trim();
+  const fallback = String(fallbackQuestion || "Could you please provide a bit more detail?").trim();
+
+  if (!raw) return fallback;
+
+  const lowered = raw
+    .toLowerCase()
+    .replace(/appointmenttime/g, "appointment time")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const isAbruptFragment =
+    raw.length < 90 &&
+    !/[?.!]$/.test(raw) &&
+    (raw.includes(",") || /\bdoctor\b|\bdate\b|\btime\b|\breason\b|\bbooking\b/.test(lowered));
+
+  if (isAbruptFragment) {
+    const items = lowered
+      .replace(/^please\s+/i, "")
+      .replace(/\bfor\s+the\s+appointment\b/g, "")
+      .split(",")
+      .map((part) => part.replace(/^and\s+/i, "").trim())
+      .filter(Boolean);
+
+    if (items.length > 1) {
+      return `Could you please share the ${formatListAsSentence(items)}?`;
+    }
+
+    return `Could you please share ${lowered}?`;
+  }
+
+  if (/^please\b/i.test(raw)) {
+    return raw.endsWith("?") ? raw : `${raw}?`;
+  }
+
+  if (/\?$/.test(raw)) {
+    return raw;
+  }
+
+  return `Could you please clarify: ${raw.replace(/[.]+$/, "")}?`;
+}
+
+function detectSlotAvailabilityIntent(message, history = []) {
+  const text = String(message || "").toLowerCase();
+  const hasSlotWords =
+    /\b(slot|slots|time slot|time slots|available time|availability|free time|open time|open slot)\b/.test(text) ||
+    (/\bavailable\b/.test(text) && /\b(time|times)\b/.test(text));
+  const hasAppointmentContext = /\b(appointment|book|booking|schedule)\b/.test(text);
+  const explicitQuestion = /\b(what|which|show|tell|give|any)\b/.test(text);
+
+  if (hasSlotWords && (hasAppointmentContext || explicitQuestion)) return true;
+
+  const recentAssistant = history
+    .slice(-6)
+    .filter((item) => (item?.role || item?.type || "") === "assistant")
+    .map((item) => String(item?.text || "").toLowerCase())
+    .join(" \n ");
+
+  if (hasSlotWords && /date and time|time would you prefer|what date/.test(recentAssistant)) return true;
+  return false;
+}
+
+function getRecentDoctorQueryHint(history = []) {
+  const recentUserMessages = history
+    .filter((item) => (item?.role || item?.type || "") === "user")
+    .slice(-8)
+    .map((item) => String(item?.text || "").trim())
+    .filter(Boolean);
+
+  for (let i = recentUserMessages.length - 1; i >= 0; i -= 1) {
+    const hint = extractDoctorQueryFromMessage(recentUserMessages[i]);
+    if (hint) return hint;
+  }
+
+  return null;
+}
+
 function detectReasonQuery(message, history = []) {
   const text = String(message || "").toLowerCase();
   const hasReasonWord = /\breason\b|\bwhy\b|\breas\w*\b/.test(text);
@@ -246,6 +344,11 @@ function detectReasonQuery(message, history = []) {
   const genericReasonFollowup = /\b(what|which|was|is|the|for)\b/.test(text);
   const isSelectorReply = /\b(all of them|all|each|every|both|all appointments)\b/.test(text);
   const shortFuzzyReason = /\bwhat\b.*\breas\w*\b|\bwhy\b.*\b(that|this|it)\b/.test(text);
+
+  // Prevent false positives like: "i feel dumb idk why"
+  if (/\b(i\s*feel|feeling|dumb|stupid|confused|frustrated|idk\s+why)\b/.test(text) && !hasAppointmentWord) {
+    return false;
+  }
 
   const recentAssistant = history
     .slice(-12)
@@ -258,7 +361,13 @@ function detectReasonQuery(message, history = []) {
   if (hasReasonWord && hasAppointmentWord) return true;
   if (hasReasonWord && asksForEach) return true;
   if (isSelectorReply && recentAskedReasonSelection) return true;
-  if (hasReasonWord && genericReasonFollowup) return true;
+  if (hasReasonWord && genericReasonFollowup) {
+    const recent = history
+      .slice(-10)
+      .map((item) => String(item?.text || "").toLowerCase())
+      .join(" ");
+    if (recent.includes("appointment") || recent.includes("appointments")) return true;
+  }
   if (shortFuzzyReason) {
     const recent = history
       .slice(-12)
@@ -284,6 +393,39 @@ function detectReasonQuery(message, history = []) {
   }
 
   return false;
+}
+
+function getRecentDateHint(history = []) {
+  const recentUserMessages = history
+    .filter((item) => (item?.role || item?.type || "") === "user")
+    .slice(-6)
+    .map((item) => String(item?.text || "").trim())
+    .filter(Boolean);
+
+  for (let i = recentUserMessages.length - 1; i >= 0; i -= 1) {
+    const parsed = parseNaturalDate(recentUserMessages[i]);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function getRecentTimeHint(history = []) {
+  const recentUserMessages = history
+    .filter((item) => (item?.role || item?.type || "") === "user")
+    .slice(-6)
+    .map((item) => String(item?.text || "").trim())
+    .filter(Boolean);
+
+  for (let i = recentUserMessages.length - 1; i >= 0; i -= 1) {
+    const parsed = parseNaturalTime(recentUserMessages[i]);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function isAffirmativeReply(message) {
+  const text = String(message || "").trim().toLowerCase();
+  return /^(yes|yeah|yep|yup|ok|okay|sure|correct|right|exactly)$/i.test(text);
 }
 
 function inferListModeFromHistory(history = []) {
@@ -408,14 +550,33 @@ async function getAppointmentsForUser(userId, role = "patient") {
             d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email,
             d.specialty as doctor_specialty, d.years_experience as doctor_years_experience
      from appointments a
-     left join users p on p.id = a.patient_id
-     left join users d on d.id = a.doctor_id
+     left join users p on p.id = a.patient_id and p.role = 'patient'
+     left join users d on d.id = a.doctor_id and d.role = 'doctor'
      where a.${column} = $1
      order by a.created_at desc`,
     [userId]
   );
 
   return result.rows.map(attachAppointmentUsers);
+}
+
+async function getRoleBoundRecipientEmails(patientId, doctorId) {
+  // Fetch patient email directly from patient user
+  const patientResult = await query(
+    "select email from users where id = $1 and role = 'patient' limit 1",
+    [patientId]
+  );
+  
+  // Fetch doctor email directly from doctor user
+  const doctorResult = await query(
+    "select email from users where id = $1 and role = 'doctor' limit 1",
+    [doctorId]
+  );
+
+  const patient_email = patientResult.rows[0]?.email || "";
+  const doctor_email = doctorResult.rows[0]?.email || "";
+
+  return { patient_email, doctor_email };
 }
 
 async function findDoctorCandidates(queryText) {
@@ -494,8 +655,19 @@ function extractDoctorQueryFromMessage(message) {
   const text = String(message || "").trim();
   if (!text) return null;
 
+  // Match "with dr(.)? name" patterns
   const withDoctor = text.match(/\bwith\s+(?:dr\.?\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i);
   if (withDoctor) return String(withDoctor[1] || "").trim();
+
+  // Match "dr(.)? name" at start or standalone (e.g., "dr fakhouri", "dr. ahmed")
+  const drPrefix = text.match(/^(?:dr\.?\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})$/i);
+  if (drPrefix && drPrefix[1].toLowerCase() !== "doctor") return String(drPrefix[1] || "").trim();
+
+  // Match standalone "dr(.)? name" in text (but not when it's part of a sentence like "i saw dr yesterday")
+  if (/^dr\.?\s+[a-z]/i.test(text)) {
+    const match = text.match(/^(?:dr\.?\s+)([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i);
+    if (match) return String(match[1] || "").trim();
+  }
 
   const inferred = inferSpecialty(text);
   if (inferred) return inferred;
@@ -519,6 +691,7 @@ function extractIntentLocally({ message, history, userRole }) {
   else if (userRole === "doctor" && detectVisitSummaryIntent(text)) intent = "add_visit_summary";
   else if (userRole === "doctor" && detectCancelByPatientIntent(text)) intent = "cancel_by_patient";
   else if (detectReasonQuery(text, history)) intent = "reason_query";
+  else if (detectSlotAvailabilityIntent(text, history)) intent = "availability_query";
   else if (/\b(help|what can you do|capabilities|options)\b/.test(lower)) intent = "help";
   else if (/\b(reschedule|change|move)\b/.test(lower)) intent = "reschedule";
   else if (/\b(cancel|remove|delete)\b/.test(lower) && /\bappointment\b/.test(lower)) intent = "cancel";
@@ -578,12 +751,13 @@ async function extractIntentWithGemini({ message, history, userRole, userName, d
     "You are the AI assistant for a medical appointment website.",
     "Return strict JSON only, no markdown, no code fences.",
     "Schema:",
-    '{"intent":"chat|book|cancel|reschedule|list_appointments|doctor_info|help|add_visit_summary|cancel_by_patient|reason_query|visit_summary_query","reply":"string","doctorQuery":"string|null","doctorId":"string|null","appointmentId":"string|null","appointmentDate":"YYYY-MM-DD|null","appointmentTime":"HH:MM|null","newAppointmentDate":"YYYY-MM-DD|null","newAppointmentTime":"HH:MM|null","reason":"string|null","notes":"string|null","visitSummary":"string|null","patientQuery":"string|null","clarification":"string|null"}',
+    '{"intent":"chat|book|cancel|reschedule|availability_query|list_appointments|doctor_info|help|add_visit_summary|cancel_by_patient|reason_query|visit_summary_query","reply":"string","doctorQuery":"string|null","doctorId":"string|null","appointmentId":"string|null","appointmentDate":"YYYY-MM-DD|null","appointmentTime":"HH:MM|null","newAppointmentDate":"YYYY-MM-DD|null","newAppointmentTime":"HH:MM|null","reason":"string|null","notes":"string|null","visitSummary":"string|null","patientQuery":"string|null","clarification":"string|null"}',
     "Rules:",
     "- intent=book when the user wants to schedule a new appointment.",
     "- intent=cancel when the user wants to cancel an appointment.",
     "- intent=reschedule when the user wants to change an existing appointment.",
     "- intent=list_appointments when the user asks for their appointments.",
+    "- intent=availability_query when the user asks for available slots/times for a doctor on a date.",
     "- intent=doctor_info when the user asks for doctor suggestions or a doctor by specialty.",
     "- intent=add_visit_summary when a doctor wants to add or update a visit summary for a completed appointment.",
     "- intent=cancel_by_patient when a doctor wants to cancel appointments for a specific patient name.",
@@ -994,6 +1168,73 @@ async function chatWithGemini(req, res) {
       });
     }
 
+    if (intent === "availability_query" || detectSlotAvailabilityIntent(message, history)) {
+      const doctorQuery = String(
+        extracted.doctorQuery ||
+          extractDoctorQueryFromMessage(message) ||
+          getRecentDoctorQueryHint(history) ||
+          ""
+      ).trim();
+
+      if (!doctorQuery) {
+        return res.json({
+          reply: "Could you please tell me which doctor or specialty you want available slots for?",
+        });
+      }
+
+      const candidateDoctors = extracted.doctorId
+        ? doctors.filter((doctor) => String(doctor.id) === String(extracted.doctorId))
+        : await findDoctorCandidates(doctorQuery);
+
+      if (!candidateDoctors.length) {
+        return res.json({
+          reply: `I could not find a matching doctor for "${doctorQuery}". Could you please share the full doctor name or specialty?`,
+        });
+      }
+
+      if (candidateDoctors.length > 1 && !extracted.doctorId) {
+        const options = candidateDoctors
+          .slice(0, 5)
+          .map((doctor, index) => `${index + 1}. ${doctor.firstName} ${doctor.lastName} - ${doctor.specialty || "General Medicine"}`)
+          .join("\n");
+
+        return res.json({
+          reply: `I found more than one match. Please choose the doctor:\n\n${options}`,
+        });
+      }
+
+      const doctor = candidateDoctors[0];
+      const requestedDate =
+        parseNaturalDate(message) ||
+        parseNaturalDate(extracted.appointmentDate || "") ||
+        getRecentDateHint(history);
+
+      if (!requestedDate) {
+        return res.json({
+          reply: `Sure. For which date would you like available slots with Dr. ${doctor.firstName} ${doctor.lastName}? You can say "today", "tomorrow", or a calendar date.`,
+        });
+      }
+
+      const bookedResult = await query(
+        `select appointment_time
+         from appointments
+         where doctor_id = $1 and appointment_date = $2 and status <> 'cancelled'`,
+        [doctor.id, requestedDate]
+      );
+      const bookedTimes = bookedResult.rows.map((row) => row.appointment_time);
+      const availableSlots = generateSlotsFallback(doctor, requestedDate, bookedTimes);
+
+      if (!availableSlots.length) {
+        return res.json({
+          reply: `There are no available slots for Dr. ${doctor.firstName} ${doctor.lastName} on ${requestedDate}. Would you like me to check another date?`,
+        });
+      }
+
+      return res.json({
+        reply: `Available slots for Dr. ${doctor.firstName} ${doctor.lastName} on ${requestedDate}: ${availableSlots.slice(0, 10).join(", ")}`,
+      });
+    }
+
     if (intent === "help") {
       return res.json({
         reply:
@@ -1075,9 +1316,10 @@ async function chatWithGemini(req, res) {
 
       if (!matches.length) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            "I could not find a matching doctor. Please tell me the specialty or doctor name.",
+          reply: toPoliteClarification(
+            extracted.clarification,
+            "I could not find a matching doctor. Could you please share the specialty or doctor name?"
+          ),
         });
       }
 
@@ -1103,21 +1345,31 @@ async function chatWithGemini(req, res) {
 
       if (!candidateDoctors.length || (!doctorQuery && !extracted.doctorId)) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            "Which doctor or specialty would you like to book with?",
+          reply: toPoliteClarification(
+            extracted.clarification,
+            "Which doctor or specialty would you like to book with?"
+          ),
         });
       }
 
+      // Improved exact doctor matching: full name or single last name
+      const queryLower = doctorQuery.toLowerCase();
       const exactDoctor = doctors.find((doctor) => {
         const fullName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
-        return fullName === doctorQuery.toLowerCase();
+        const lastName = String(doctor.lastName).toLowerCase().trim();
+        return fullName === queryLower || lastName === queryLower;
       });
 
-      if (!exactDoctor && candidateDoctors.length > 1 && !extracted.doctorId) {
+      // If we have an exact match in candidates, use it directly
+      let doctor = exactDoctor && candidateDoctors.some((d) => String(d.id) === String(exactDoctor.id)) 
+        ? exactDoctor 
+        : null;
+
+      // Only ask for clarification if no exact match and multiple candidates
+      if (!doctor && candidateDoctors.length > 1 && !extracted.doctorId) {
         const options = candidateDoctors
           .slice(0, 3)
-          .map((doctor, index) => `${index + 1}. ${doctor.firstName} ${doctor.lastName} - ${doctor.specialty || "General Medicine"}`)
+          .map((d, index) => `${index + 1}. ${d.firstName} ${d.lastName} - ${d.specialty || "General Medicine"}`)
           .join("\n");
 
         return res.json({
@@ -1125,24 +1377,46 @@ async function chatWithGemini(req, res) {
         });
       }
 
-      const doctor = exactDoctor || candidateDoctors[0];
-      const appointmentDate = parseNaturalDate(extracted.appointmentDate || message);
-      const appointmentTime = parseNaturalTime(extracted.appointmentTime || message);
+      // If still no doctor, use the first candidate
+      if (!doctor) {
+        doctor = candidateDoctors[0];
+      }
+
+      const recentAssistantText = history
+        .filter((item) => (item?.role || item?.type || "") === "assistant")
+        .slice(-4)
+        .map((item) => String(item?.text || "").toLowerCase())
+        .join("\n");
+      const askedTomorrowDate =
+        recentAssistantText.includes("exact date for tomorrow") ||
+        recentAssistantText.includes("what date for tomorrow");
+
+      const appointmentDate =
+        (isAffirmativeReply(message) && askedTomorrowDate ? parseNaturalDate("tomorrow") : null) ||
+        parseNaturalDate(message) ||
+        getRecentDateHint(history) ||
+        parseNaturalDate(extracted.appointmentDate || "");
+      const appointmentTime =
+        parseNaturalTime(message) ||
+        getRecentTimeHint(history) ||
+        parseNaturalTime(extracted.appointmentTime || "");
       const bookingReason = String(extracted.reason || "").trim();
 
       if (!appointmentDate || !appointmentTime) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            `I found ${doctor.firstName} ${doctor.lastName}. What exact date and time would you like?`,
+          reply: toPoliteClarification(
+            extracted.clarification,
+            `I found ${doctor.firstName} ${doctor.lastName}. Could you please tell me the exact date and time you prefer?`
+          ),
         });
       }
 
       if (!bookingReason || bookingReason.length < 3) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            "Please tell me the reason for the appointment (for example: chest pain, follow-up, skin rash).",
+          reply: toPoliteClarification(
+            extracted.clarification,
+            "Could you please share the reason for the appointment (for example: chest pain, follow-up, or skin rash)?"
+          ),
         });
       }
 
@@ -1195,8 +1469,8 @@ async function chatWithGemini(req, res) {
                 d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email,
                 d.specialty as doctor_specialty, d.years_experience as doctor_years_experience
          from appointments a
-         left join users p on p.id = a.patient_id
-         left join users d on d.id = a.doctor_id
+         left join users p on p.id = a.patient_id and p.role = 'patient'
+         left join users d on d.id = a.doctor_id and d.role = 'doctor'
          where a.id = $1 limit 1`,
         [insertResult.rows[0].id]
       );
@@ -1205,12 +1479,13 @@ async function chatWithGemini(req, res) {
       try {
         const doctorName = formatDoctorName(appt.doctorId);
         const patientName = [appt.patientId?.firstName, appt.patientId?.lastName].filter(Boolean).join(" ").trim();
+        const recipients = await getRoleBoundRecipientEmails(appt.patientId?.id || appt.patientId, appt.doctorId?.id || appt.doctorId);
         const msUntil = apptAt.getTime() - Date.now();
 
         await sendAppointmentConfirmationEmail({
-          patientEmail: appt.patientId?.email,
+          patientEmail: recipients.patient_email,
           patientName,
-          doctorEmail: appt.doctorId?.email,
+          doctorEmail: recipients.doctor_email,
           doctorName,
           appointmentDate,
           appointmentTime,
@@ -1220,7 +1495,7 @@ async function chatWithGemini(req, res) {
 
         if (msUntil <= 24 * 60 * 60 * 1000 && msUntil > 30 * 60 * 1000) {
           await sendAppointmentReminderEmail({
-            patientEmail: appt.patientId?.email,
+            patientEmail: recipients.patient_email,
             patientName,
             doctorName,
             appointmentDate,
@@ -1233,6 +1508,8 @@ async function chatWithGemini(req, res) {
 
       return res.json({
         reply: `Booked successfully with ${doctor.firstName} ${doctor.lastName} on ${appointmentDate} at ${appointmentTime}.`,
+        appointmentsUpdated: true,
+        action: "book",
       });
     }
 
@@ -1244,9 +1521,10 @@ async function chatWithGemini(req, res) {
       const appointmentCandidate = await findAppointmentCandidate(req.user.userId, userRole, extracted, message);
       if (!appointmentCandidate) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            "I could not find any of your appointments. Please tell me the doctor name or appointment date.",
+          reply: toPoliteClarification(
+            extracted.clarification,
+            "I could not find any matching appointment. Could you please share the doctor name or appointment date?"
+          ),
         });
       }
       if (appointmentCandidate?.ambiguous) {
@@ -1263,9 +1541,10 @@ async function chatWithGemini(req, res) {
       const appointment = appointmentCandidate;
       if (!appointment) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            "I could not identify which appointment you mean. Please tell me the doctor name, date, or time.",
+          reply: toPoliteClarification(
+            extracted.clarification,
+            "I could not identify which appointment you mean. Could you please share the doctor name, date, or time?"
+          ),
         });
       }
 
@@ -1285,18 +1564,22 @@ async function chatWithGemini(req, res) {
                   d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email,
                   d.specialty as doctor_specialty, d.years_experience as doctor_years_experience
            from appointments a
-           left join users p on p.id = a.patient_id
-           left join users d on d.id = a.doctor_id
+           left join users p on p.id = a.patient_id and p.role = 'patient'
+           left join users d on d.id = a.doctor_id and d.role = 'doctor'
            where a.id = $1 limit 1`,
           [appointment.id]
         );
         const cancelled = attachAppointmentUsers(updated.rows[0]);
 
         try {
+          const recipients = await getRoleBoundRecipientEmails(
+            cancelled.patientId?.id || cancelled.patientId,
+            cancelled.doctorId?.id || cancelled.doctorId
+          );
           await sendAppointmentCancelledEmail({
-            patientEmail: cancelled.patientId?.email,
+            patientEmail: recipients.patient_email,
             patientName: [cancelled.patientId?.firstName, cancelled.patientId?.lastName].filter(Boolean).join(" ").trim(),
-            doctorEmail: cancelled.doctorId?.email,
+            doctorEmail: recipients.doctor_email,
             doctorName: formatDoctorName(cancelled.doctorId),
             appointmentDate: cancelled.appointmentDate,
             appointmentTime: cancelled.appointmentTime,
@@ -1308,6 +1591,8 @@ async function chatWithGemini(req, res) {
 
         return res.json({
           reply: `Cancelled your appointment on ${cancelled.appointmentDate} at ${cancelled.appointmentTime}.`,
+          appointmentsUpdated: true,
+          action: "cancel",
         });
       }
 
@@ -1315,9 +1600,10 @@ async function chatWithGemini(req, res) {
       const newTime = parseNaturalTime(extracted.newAppointmentTime || extracted.appointmentTime || message);
       if (!newDate || !newTime) {
         return res.json({
-          reply:
-            extracted.clarification ||
-            "What new date and time would you like to use for the reschedule?",
+          reply: toPoliteClarification(
+            extracted.clarification,
+            "What new date and time would you like for the reschedule?"
+          ),
         });
       }
 
@@ -1357,18 +1643,22 @@ async function chatWithGemini(req, res) {
                 d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email,
                 d.specialty as doctor_specialty, d.years_experience as doctor_years_experience
          from appointments a
-         left join users p on p.id = a.patient_id
-         left join users d on d.id = a.doctor_id
+         left join users p on p.id = a.patient_id and p.role = 'patient'
+         left join users d on d.id = a.doctor_id and d.role = 'doctor'
          where a.id = $1 limit 1`,
         [appointment.id]
       );
       const rescheduled = attachAppointmentUsers(updated.rows[0]);
 
       try {
+        const recipients = await getRoleBoundRecipientEmails(
+          rescheduled.patientId?.id || rescheduled.patientId,
+          rescheduled.doctorId?.id || rescheduled.doctorId
+        );
         await sendAppointmentRescheduledEmail({
-          patientEmail: rescheduled.patientId?.email,
+          patientEmail: recipients.patient_email,
           patientName: [rescheduled.patientId?.firstName, rescheduled.patientId?.lastName].filter(Boolean).join(" ").trim(),
-          doctorEmail: rescheduled.doctorId?.email,
+          doctorEmail: recipients.doctor_email,
           doctorName: formatDoctorName(rescheduled.doctorId),
           appointmentDate: newDate,
           appointmentTime: newTime,
@@ -1380,6 +1670,8 @@ async function chatWithGemini(req, res) {
 
       return res.json({
         reply: `Rescheduled your appointment to ${newDate} at ${newTime}.`,
+        appointmentsUpdated: true,
+        action: "reschedule",
       });
     }
 

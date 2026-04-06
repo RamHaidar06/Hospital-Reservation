@@ -19,6 +19,25 @@ function parseApptDate(dateStr, timeStr) {
   return new Date(`${dateStr}T${timeStr}:00`);
 }
 
+async function getRoleBoundRecipientEmails(patientId, doctorId) {
+  // Fetch patient email directly from patient user
+  const patientResult = await query(
+    "select email from users where id = $1 and role = 'patient' limit 1",
+    [patientId]
+  );
+  
+  // Fetch doctor email directly from doctor user
+  const doctorResult = await query(
+    "select email from users where id = $1 and role = 'doctor' limit 1",
+    [doctorId]
+  );
+
+  const patient_email = patientResult.rows[0]?.email || "";
+  const doctor_email = doctorResult.rows[0]?.email || "";
+
+  return { patient_email, doctor_email };
+}
+
 async function getAppointmentWithUsers(id) {
   const result = await query(
     `select a.*,
@@ -26,8 +45,8 @@ async function getAppointmentWithUsers(id) {
             d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email,
             d.specialty as doctor_specialty, d.years_experience as doctor_years_experience
      from appointments a
-     left join users p on p.id = a.patient_id
-     left join users d on d.id = a.doctor_id
+     left join users p on p.id = a.patient_id and p.role = 'patient'
+     left join users d on d.id = a.doctor_id and d.role = 'doctor'
      where a.id = $1
      limit 1`,
     [id]
@@ -103,15 +122,20 @@ router.post("/", auth, async (req, res) => {
 
     const doctorName = [appt.doctorId?.firstName, appt.doctorId?.lastName].filter(Boolean).join(" ").trim();
     const patientName = [appt.patientId?.firstName, appt.patientId?.lastName].filter(Boolean).join(" ").trim();
+    const recipients = await getRoleBoundRecipientEmails(appt.patientId?.id || appt.patientId, appt.doctorId?.id || appt.doctorId);
+    
+    // Log resolved emails for debugging
+    console.log(`[Route][book] patient=${appt.patientId?.id || appt.patientId} -> ${recipients.patient_email ? recipients.patient_email.slice(0,2) + '***' : 'EMPTY'} | doctor=${appt.doctorId?.id || appt.doctorId} -> ${recipients.doctor_email ? recipients.doctor_email.slice(0,2) + '***' : 'EMPTY'}`);
+    
     const apptMs = parseApptDate(appointmentDate, appointmentTime).getTime();
     const msUntil = apptMs - Date.now();
 
     let emailStatus = { skipped: true, reason: "Not attempted" };
     try {
       emailStatus = await sendAppointmentConfirmationEmail({
-        patientEmail: appt.patientId?.email,
+        patientEmail: recipients.patient_email,
         patientName,
-        doctorEmail: appt.doctorId?.email,
+        doctorEmail: recipients.doctor_email,
         doctorName: doctorName ? `Dr. ${doctorName}` : "Doctor",
         appointmentDate,
         appointmentTime,
@@ -121,7 +145,7 @@ router.post("/", auth, async (req, res) => {
 
       if (msUntil <= TWENTY_FOUR_HOURS_MS && msUntil > THIRTY_MIN_MS) {
         await sendAppointmentReminderEmail({
-          patientEmail: appt.patientId?.email,
+          patientEmail: recipients.patient_email,
           patientName,
           doctorName: doctorName ? `Dr. ${doctorName}` : "Doctor",
           appointmentDate,
@@ -297,13 +321,14 @@ router.patch("/:id/cancel", auth, async (req, res) => {
 
     const doctorName = [updated.doctorId?.firstName, updated.doctorId?.lastName].filter(Boolean).join(" ").trim();
     const patientName = [updated.patientId?.firstName, updated.patientId?.lastName].filter(Boolean).join(" ").trim();
+    const recipients = await getRoleBoundRecipientEmails(updated.patientId?.id || updated.patientId, updated.doctorId?.id || updated.doctorId);
     let emailStatus = { skipped: true, reason: "Not attempted" };
 
     try {
       emailStatus = await sendAppointmentCancelledEmail({
-        patientEmail: updated.patientId?.email,
+        patientEmail: recipients.patient_email,
         patientName,
-        doctorEmail: updated.doctorId?.email,
+        doctorEmail: recipients.doctor_email,
         doctorName: doctorName ? `Dr. ${doctorName}` : "Doctor",
         appointmentDate: updated.appointmentDate,
         appointmentTime: updated.appointmentTime,
@@ -357,13 +382,14 @@ router.patch("/:id/reschedule", auth, async (req, res) => {
     const updated = await getAppointmentWithUsers(id);
     const doctorName = [updated.doctorId?.firstName, updated.doctorId?.lastName].filter(Boolean).join(" ").trim();
     const patientName = [updated.patientId?.firstName, updated.patientId?.lastName].filter(Boolean).join(" ").trim();
+    const recipients = await getRoleBoundRecipientEmails(updated.patientId?.id || updated.patientId, updated.doctorId?.id || updated.doctorId);
     let emailStatus = { skipped: true, reason: "Not attempted" };
 
     try {
       emailStatus = await sendAppointmentRescheduledEmail({
-        patientEmail: updated.patientId?.email,
+        patientEmail: recipients.patient_email,
         patientName,
-        doctorEmail: updated.doctorId?.email,
+        doctorEmail: recipients.doctor_email,
         doctorName: doctorName ? `Dr. ${doctorName}` : "Doctor",
         appointmentDate,
         appointmentTime,
@@ -402,13 +428,14 @@ router.patch("/:id", auth, async (req, res) => {
 
       const doctorName = [updated.doctorId?.firstName, updated.doctorId?.lastName].filter(Boolean).join(" ").trim();
       const patientName = [updated.patientId?.firstName, updated.patientId?.lastName].filter(Boolean).join(" ").trim();
+      const recipients = await getRoleBoundRecipientEmails(updated.patientId?.id || updated.patientId, updated.doctorId?.id || updated.doctorId);
       let emailStatus = { skipped: true, reason: "Not attempted" };
 
       try {
         emailStatus = await sendAppointmentCancelledEmail({
-          patientEmail: updated.patientId?.email,
+          patientEmail: recipients.patient_email,
           patientName,
-          doctorEmail: updated.doctorId?.email,
+          doctorEmail: recipients.doctor_email,
           doctorName: doctorName ? `Dr. ${doctorName}` : "Doctor",
           appointmentDate: updated.appointmentDate,
           appointmentTime: updated.appointmentTime,

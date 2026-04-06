@@ -5,12 +5,12 @@ import useAppointmentChatbot from "../hooks/useAppointmentChatbot";
  * AppointmentChatbot UI Component
  * Floating chatbot widget for appointment management
  */
-export default function AppointmentChatbot({ loggedInPatient, loggedInDoctor, isAuthenticated }) {
+export default function AppointmentChatbot({ loggedInPatient, loggedInDoctor, isAuthenticated, onAppointmentsChanged }) {
   const [isOpen, setIsOpen] = useState(false);
   const activeUser = loggedInPatient || loggedInDoctor || null;
   const userRole = loggedInDoctor ? "doctor" : "patient";
   const { messages, loading, submitTextMessage, selectQuickReply, resetChat } =
-    useAppointmentChatbot(activeUser, userRole);
+    useAppointmentChatbot(activeUser, userRole, onAppointmentsChanged);
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef(null);
 

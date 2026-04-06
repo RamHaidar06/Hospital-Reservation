@@ -88,11 +88,28 @@ router.post("/register", async (req, res) => {
     );
 
     const user = result.rows[0];
-    const token = createJwtForUser(user);
 
-    res.json({
-      token,
-      user: toUserPayload(user),
+    // Send OTP for email verification instead of auto-login
+    const otpResult = await generateAndSendOTP(String(email).trim().toLowerCase(), "email");
+    if (otpResult.success) {
+      return res.json({
+        message: "Account created! OTP sent to your email. Please verify before logging in.",
+        requiresOTP: true,
+        expiresIn: otpResult.expiresIn,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          firstName: user.first_name,
+          lastName: user.last_name,
+        },
+      });
+    }
+
+    // Fallback: if OTP failed, still created user but notify error
+    res.status(500).json({
+      message: "Account created but OTP send failed. Please try logging in and re-verify.",
+      error: "OTP delivery failed",
     });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });

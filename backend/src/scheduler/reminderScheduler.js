@@ -30,7 +30,7 @@ async function runSchedulerTick() {
              p.first_name as patient_first_name, p.last_name as patient_last_name, p.email as patient_email,
              d.first_name as doctor_first_name, d.last_name as doctor_last_name, d.email as doctor_email
            from users p, users d
-           where p.id = $1 and d.id = $2`,
+           where p.id = $1 and p.role = 'patient' and d.id = $2 and d.role = 'doctor'`,
           [appt.patient_id, appt.doctor_id]
         );
 
@@ -61,7 +61,7 @@ async function runSchedulerTick() {
              p.first_name as patient_first_name, p.last_name as patient_last_name, p.email as patient_email,
              d.first_name as doctor_first_name, d.last_name as doctor_last_name
            from users p, users d
-           where p.id = $1 and d.id = $2`,
+           where p.id = $1 and p.role = 'patient' and d.id = $2 and d.role = 'doctor'`,
           [appt.patient_id, appt.doctor_id]
         );
 

@@ -201,7 +201,17 @@ export default function useAuthHandlers({
         }),
       });
 
-      if (data?.token) {
+      if (data?.requiresOTP) {
+        // Show OTP verification screen after signup
+        setOtpEmail(email);
+        setOtpUserRole("patient");
+        setOtpExpiresIn(data.expiresIn || 600);
+        setOtpRememberDeviceWanted(false);
+        setAwaitingOTP(true);
+        setPatientAuthView("otp");
+        showMessage("✓ Account created! Please verify your email with the OTP sent.", "success");
+      } else if (data?.token) {
+        // Legacy fallback (if server doesn't require OTP)
         await completeLogin(data.token, data.user || data, false);
 
         setPatientRegister({
@@ -302,26 +312,49 @@ export default function useAuthHandlers({
         }),
       });
 
-      const user = normalizeId(data.user || data);
+      if (data?.requiresOTP) {
+        // Show OTP verification screen after signup
+        setOtpEmail(email);
+        setOtpUserRole("doctor");
+        setOtpExpiresIn(data.expiresIn || 600);
+        setOtpRememberDeviceWanted(false);
+        setAwaitingOTP(true);
+        setDoctorAuthView("otp");
+        showMessage("✓ Account created! Please verify your email with the OTP sent.", "success");
+        
+        setDoctorRegister({
+          firstName: "",
+          lastName: "",
+          email: "",
+          specialty: "",
+          license: "",
+          experience: "",
+          password: "",
+          confirmPassword: "",
+        });
+      } else if (data?.token) {
+        // Legacy fallback (if server doesn't require OTP)
+        const user = normalizeId(data.user || data);
 
-      setAllData((prev) => ({
-        ...prev,
-        doctors: [...prev.doctors, user],
-      }));
+        setAllData((prev) => ({
+          ...prev,
+          doctors: [...prev.doctors, user],
+        }));
 
-      setDoctorRegister({
-        firstName: "",
-        lastName: "",
-        email: "",
-        specialty: "",
-        license: "",
-        experience: "",
-        password: "",
-        confirmPassword: "",
-      });
+        setDoctorRegister({
+          firstName: "",
+          lastName: "",
+          email: "",
+          specialty: "",
+          license: "",
+          experience: "",
+          password: "",
+          confirmPassword: "",
+        });
 
-      setDoctorAuthView("login");
-      showMessage("✓ Doctor registered! Please log in.", "success");
+        setDoctorAuthView("login");
+        showMessage("✓ Doctor registered! Please log in.", "success");
+      }
     } catch (err) {
       showMessage("✗ " + err.message, "error");
     }

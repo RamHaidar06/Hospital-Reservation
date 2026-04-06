@@ -36,7 +36,7 @@ function buildPrompt(messages, userText, userRole) {
   return `${roleContext}\n\nConversation so far:\n${recentMessages || "No prior messages."}\n\nUser: ${userText}\nAssistant:`;
 }
 
-export default function useAppointmentChatbot(currentUser, userRole = "patient") {
+export default function useAppointmentChatbot(currentUser, userRole = "patient", onAppointmentsChanged = null) {
   const [messages, setMessages] = useState([getInitialBotMessage(userRole, currentUser)]);
   const [loading, setLoading] = useState(false);
 
@@ -93,6 +93,14 @@ export default function useAppointmentChatbot(currentUser, userRole = "patient")
         });
 
         pushBotMessage(data.reply || "I’m sorry, I couldn’t generate a reply right now.");
+
+        if (data?.appointmentsUpdated && typeof onAppointmentsChanged === "function") {
+          try {
+            await onAppointmentsChanged();
+          } catch (refreshErr) {
+            console.error("Chatbot appointment refresh failed:", refreshErr?.message || refreshErr);
+          }
+        }
       } catch (error) {
         console.error("Gemini chat error:", error);
         const msg = String(error?.message || "").trim();
@@ -101,7 +109,7 @@ export default function useAppointmentChatbot(currentUser, userRole = "patient")
         setLoading(false);
       }
     },
-    [loading, messages, pushBotMessage, pushUserMessage, userRole, currentUser]
+    [loading, messages, pushBotMessage, pushUserMessage, userRole, currentUser, onAppointmentsChanged]
   );
 
   const selectQuickReply = useCallback(

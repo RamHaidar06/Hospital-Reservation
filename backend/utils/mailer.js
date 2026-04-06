@@ -1,9 +1,177 @@
 const nodemailer = require("nodemailer");
+const https = require("https");
 
 let transporter;
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSameEmail(a, b) {
+  return Boolean(normalizeEmail(a) && normalizeEmail(a) === normalizeEmail(b));
+}
+
+function maskEmail(email) {
+  const value = String(email || "").trim();
+  const parts = value.split("@");
+  if (parts.length !== 2) return value || "";
+  const local = parts[0];
+  const domain = parts[1];
+  if (!local) return `***@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function parseMailFromHeader(rawFrom) {
+  const text = String(rawFrom || "").trim();
+  const match = text.match(/^(.*)<([^>]+)>$/);
+  if (match) {
+    return {
+      name: String(match[1] || "").trim().replace(/^"|"$/g, "") || "MediCare",
+      email: String(match[2] || "").trim(),
+    };
+  }
+
+  return {
+    name: String(process.env.BREVO_SENDER_NAME || "").trim() || "MediCare",
+    email: text,
+  };
+}
+
+function getBrevoApiKey() {
+  return String(process.env.BREVO_API_KEY || "").trim();
+}
+
+function getBrevoSender(preferredFrom) {
+  const senderEmail = String(process.env.BREVO_SENDER_EMAIL || "").trim();
+  const senderName = String(process.env.BREVO_SENDER_NAME || "").trim();
+  const fallbackFrom = preferredFrom || process.env.MAIL_FROM || process.env.SMTP_USER || "MediCare <no-reply@medicare.local>";
+  const parsed = parseMailFromHeader(fallbackFrom);
+
+  return {
+    name: senderName || parsed.name || "MediCare",
+    email: senderEmail || parsed.email,
+  };
+}
+
+function hasBrevoConfig() {
+  return Boolean(getBrevoApiKey() && getBrevoSender().email);
+}
+
+function toBrevoRecipients(to) {
+  if (Array.isArray(to)) {
+    return to
+      .map((entry) => {
+        if (!entry) return null;
+        if (typeof entry === "string") {
+          const email = String(entry || "").trim();
+          return email ? { email } : null;
+        }
+        const email = String(entry.email || "").trim();
+        const name = String(entry.name || "").trim();
+        if (!email) return null;
+        return name ? { email, name } : { email };
+      })
+      .filter(Boolean);
+  }
+
+  return String(to || "")
+    .split(",")
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .map((email) => ({ email }));
+}
+
+function sendMailByBrevo({ from, to, subject, html, text }) {
+  return new Promise((resolve, reject) => {
+    const apiKey = getBrevoApiKey();
+    const recipients = toBrevoRecipients(to);
+
+    if (!apiKey) {
+      reject(new Error("BREVO_API_KEY is missing"));
+      return;
+    }
+    if (!recipients.length) {
+      reject(new Error("Missing recipient email"));
+      return;
+    }
+
+    const sender = getBrevoSender(from);
+    if (!sender.email) {
+      reject(new Error("Brevo sender email is missing"));
+      return;
+    }
+
+    const htmlContent = String(html || "<p>No content</p>");
+    const textContent =
+      String(text || "").trim() ||
+      htmlContent
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim() ||
+      "Appointment notification";
+
+    const payload = {
+      sender,
+      to: recipients,
+      subject: String(subject || "Appointment Notification"),
+      htmlContent,
+      textContent,
+    };
+
+    const request = https.request(
+      {
+        method: "POST",
+        hostname: "api.brevo.com",
+        path: "/v3/smtp/email",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": apiKey,
+          accept: "application/json",
+        },
+        timeout: 12000,
+      },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            resolve({ accepted: recipients.map((r) => r.email), response: body || "ok" });
+            return;
+          }
+
+          reject(
+            new Error(
+              `Brevo email failed (${response.statusCode}): ${body || response.statusMessage || "Unknown Brevo error"}`
+            )
+          );
+        });
+      }
+    );
+
+    request.on("error", (error) => reject(error));
+    request.on("timeout", () => request.destroy(new Error("Brevo email timed out")));
+    request.write(JSON.stringify(payload));
+    request.end();
+  });
+}
+
+function createBrevoTransporter() {
+  return {
+    sendMail: (mailOptions) => sendMailByBrevo(mailOptions),
+  };
+}
+
 function getTransporter() {
   if (transporter) return transporter;
+
+  if (hasBrevoConfig()) {
+    transporter = createBrevoTransporter();
+    return transporter;
+  }
 
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
@@ -23,9 +191,7 @@ function getTransporter() {
 }
 
 function hasMailConfig() {
-  return Boolean(
-    process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
-  );
+  return Boolean(hasBrevoConfig() || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,7 +242,9 @@ async function sendAppointmentConfirmationEmail({
   let doctorNotified    = false;
   let doctorNotifyError = null;
 
-  if (doctorEmail) {
+  console.log(`[Mail][booking] patient template -> ${maskEmail(patientEmail)} | doctor template -> ${maskEmail(doctorEmail)}`);
+
+  if (doctorEmail && !isSameEmail(doctorEmail, patientEmail)) {
     const doctorHtml = `
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827;">
         <h2 style="margin:0 0 12px;">New Appointment Booked</h2>
@@ -104,7 +272,14 @@ async function sendAppointmentConfirmationEmail({
     }
   }
 
-  return { skipped: false, patientNotified: true, doctorNotified, doctorNotifyError };
+  return {
+    skipped: false,
+    patientNotified: true,
+    doctorNotified,
+    doctorNotifyError,
+    patientRecipient: maskEmail(patientEmail),
+    doctorRecipient: maskEmail(doctorEmail),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,7 +340,8 @@ async function sendAppointmentReminderEmail({
     html,
   });
 
-  return { skipped: false, patientNotified: true };
+  console.log(`[Mail][reminder] patient template -> ${maskEmail(patientEmail)}`);
+  return { skipped: false, patientNotified: true, patientRecipient: maskEmail(patientEmail) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,7 +393,8 @@ async function sendAppointmentPatientConfirmedEmail({
     html,
   });
 
-  return { skipped: false, doctorNotified: true };
+  console.log(`[Mail][patient-confirmed] doctor template -> ${maskEmail(doctorEmail)}`);
+  return { skipped: false, doctorNotified: true, doctorRecipient: maskEmail(doctorEmail) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,7 +449,7 @@ async function sendAppointmentAutoCancelledEmail({
     }
   }
 
-  if (doctorEmail) {
+  if (doctorEmail && !isSameEmail(doctorEmail, patientEmail)) {
     const doctorHtml = `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;">
         <h2 style="margin:0 0 12px;color:#ef4444;">Appointment Automatically Cancelled</h2>
@@ -303,7 +480,12 @@ async function sendAppointmentAutoCancelledEmail({
     }
   }
 
-  return { skipped: false };
+  console.log(`[Mail][auto-cancel] patient template -> ${maskEmail(patientEmail)} | doctor template -> ${maskEmail(doctorEmail)}`);
+  return {
+    skipped: false,
+    patientRecipient: maskEmail(patientEmail),
+    doctorRecipient: maskEmail(doctorEmail),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -344,7 +526,8 @@ async function sendAppointmentRescheduledEmail({
   });
 
   let doctorNotified = false, doctorNotifyError = null;
-  if (doctorEmail) {
+  console.log(`[Mail][reschedule] patient template -> ${maskEmail(patientEmail)} | doctor template -> ${maskEmail(doctorEmail)}`);
+  if (doctorEmail && !isSameEmail(doctorEmail, patientEmail)) {
     try {
       await tx.sendMail({
         from, to: doctorEmail,
@@ -362,7 +545,14 @@ async function sendAppointmentRescheduledEmail({
     } catch (err) { doctorNotifyError = err.message; }
   }
 
-  return { skipped: false, patientNotified: true, doctorNotified, doctorNotifyError };
+  return {
+    skipped: false,
+    patientNotified: true,
+    doctorNotified,
+    doctorNotifyError,
+    patientRecipient: maskEmail(patientEmail),
+    doctorRecipient: maskEmail(doctorEmail),
+  };
 }
 
 async function sendAppointmentCancelledEmail({
@@ -395,7 +585,8 @@ async function sendAppointmentCancelledEmail({
   });
 
   let doctorNotified = false, doctorNotifyError = null;
-  if (doctorEmail) {
+  console.log(`[Mail][cancel] patient template -> ${maskEmail(patientEmail)} | doctor template -> ${maskEmail(doctorEmail)}`);
+  if (doctorEmail && !isSameEmail(doctorEmail, patientEmail)) {
     try {
       await tx.sendMail({
         from, to: doctorEmail,
@@ -413,7 +604,14 @@ async function sendAppointmentCancelledEmail({
     } catch (err) { doctorNotifyError = err.message; }
   }
 
-  return { skipped: false, patientNotified: true, doctorNotified, doctorNotifyError };
+  return {
+    skipped: false,
+    patientNotified: true,
+    doctorNotified,
+    doctorNotifyError,
+    patientRecipient: maskEmail(patientEmail),
+    doctorRecipient: maskEmail(doctorEmail),
+  };
 }
 
 module.exports = {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import "./App.css";
 
 import AuthPage    from "./pages/AuthPage";
@@ -148,6 +148,18 @@ export default function App() {
     }
     return map;
   }, [patientReviews]);
+
+  const refreshAppointmentsFromServer = useCallback(async () => {
+    try {
+      const mine = await apiFetch("/appointments/mine");
+      setAllData((prev) => ({
+        ...prev,
+        appointments: Array.isArray(mine) ? mine : prev.appointments,
+      }));
+    } catch {
+      // ignore refresh failures to avoid interrupting chat flow
+    }
+  }, []);
 
   function applyDoctorRatingUpdate(doctors, doctorId, newRating, previousReview = null, publicReview = null) {
     return (doctors || []).map((doctor) => {
@@ -398,6 +410,7 @@ export default function App() {
         loggedInPatient={loggedInPatient}
         loggedInDoctor={loggedInDoctor}
         isAuthenticated={!!loggedInPatient || !!loggedInDoctor}
+        onAppointmentsChanged={refreshAppointmentsFromServer}
       />
 
       <Toast toast={toast} />
