@@ -1,5 +1,5 @@
-const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const https = require("https");
 
 /**
  * OTP Service for email/SMS verification
@@ -9,8 +9,115 @@ const crypto = require("crypto");
 // In-memory OTP storage (in production, use Redis or MongoDB)
 const otpStore = new Map();
 
-// Email transporter configuration
-let emailTransporter = null;
+function parseMailFromHeader(rawFrom) {
+  const text = String(rawFrom || "").trim();
+  const match = text.match(/^(.*)<([^>]+)>$/);
+  if (match) {
+    return {
+      name: String(match[1] || "").trim().replace(/^"|"$/g, "") || "Medicare",
+      email: String(match[2] || "").trim(),
+    };
+  }
+  return {
+    name: "Medicare",
+    email: text,
+  };
+}
+
+function getBrevoApiKey() {
+  return String(process.env.BREVO_API_KEY || "").trim();
+}
+
+function getBrevoSender() {
+  const fallbackFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "Medicare <no-reply@medicare.local>";
+  const senderName = String(process.env.BREVO_SENDER_NAME || "").trim();
+  const senderEmail = String(process.env.BREVO_SENDER_EMAIL || "").trim();
+
+  if (senderEmail) {
+    return {
+      name: senderName || parseMailFromHeader(fallbackFrom).name || "Medicare",
+      email: senderEmail,
+    };
+  }
+
+  return parseMailFromHeader(fallbackFrom);
+}
+
+async function sendOTPByBrevo(email, otp) {
+  const apiKey = getBrevoApiKey();
+  if (!apiKey) return false;
+
+  const sender = getBrevoSender();
+  if (!sender.email) {
+    console.warn("Brevo sender email is missing. Set BREVO_SENDER_EMAIL or MAIL_FROM.");
+    return false;
+  }
+
+  const payload = {
+    sender,
+    to: [{ email: String(email || "").trim() }],
+    subject: "Your Healthcare Login Verification Code",
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 480px;">
+        <h2 style="color: #0ea5e9;">Secure Login Verification</h2>
+        <p>Your one-time verification code is:</p>
+        <h1 style="color: #0ea5e9; letter-spacing: 6px; font-size: 2.5rem; margin: 16px 0;">
+          ${otp}
+        </h1>
+        <p style="color: #666; font-size: 0.9rem;">This code will expire in 10 minutes.</p>
+        <p style="color: #999; font-size: 0.85rem;">
+          If you didn't request this code, please ignore this email.
+        </p>
+      </div>
+    `,
+  };
+
+  return new Promise((resolve) => {
+    const request = https.request(
+      {
+        method: "POST",
+        hostname: "api.brevo.com",
+        path: "/v3/smtp/email",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": apiKey,
+          accept: "application/json",
+        },
+        timeout: 12000,
+      },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            resolve(true);
+            return;
+          }
+
+          console.error(
+            `Brevo OTP send failed (${response.statusCode}) from ${sender.email}:`,
+            body || response.statusMessage || "Unknown Brevo error"
+          );
+          resolve(false);
+        });
+      }
+    );
+
+    request.on("error", (error) => {
+      console.error("Brevo OTP send error:", error.message || error);
+      resolve(false);
+    });
+
+    request.on("timeout", () => {
+      request.destroy(new Error("Brevo OTP send timed out"));
+    });
+
+    request.write(JSON.stringify(payload));
+    request.end();
+  });
+}
 
 function normalizeEmailKey(email) {
   return String(email || "").trim().toLowerCase();
@@ -18,28 +125,6 @@ function normalizeEmailKey(email) {
 
 function normalizeOtpCode(code) {
   return String(code || "").trim().replace(/\D/g, "");
-}
-
-function initEmailTransporter() {
-  if (emailTransporter) return;
-
-  const hasEmailConfig = process.env.SMTP_HOST && process.env.SMTP_PORT;
-
-  if (hasEmailConfig) {
-    emailTransporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT),
-      secure: process.env.SMTP_PORT === "465",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      // Hard timeout so the transporter never hangs indefinitely
-      connectionTimeout: 8000,  // 8s to connect
-      greetingTimeout:   5000,  // 5s for SMTP greeting
-      socketTimeout:     10000, // 10s socket inactivity
-    });
-  }
 }
 
 /**
@@ -50,54 +135,14 @@ function generateOTP() {
 }
 
 /**
- * Send OTP via email — with a hard 12-second timeout so it never hangs
+ * Send OTP via email using Brevo.
  */
 async function sendOTPByEmail(email, otp) {
-  try {
-    initEmailTransporter();
-
-    if (!emailTransporter) {
-      console.warn("Email not configured. OTP not sent. OTP is:", otp);
-      return false;
-    }
-
-    const mailOptions = {
-      from: process.env.MAIL_FROM || process.env.SMTP_USER,
-      to: email,
-      subject: "Your Healthcare Login Verification Code",
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 480px;">
-          <h2 style="color: #0ea5e9;">Secure Login Verification</h2>
-          <p>Your one-time verification code is:</p>
-          <h1 style="color: #0ea5e9; letter-spacing: 6px; font-size: 2.5rem; margin: 16px 0;">
-            ${otp}
-          </h1>
-          <p style="color: #666; font-size: 0.9rem;">This code will expire in 10 minutes.</p>
-          <p style="color: #999; font-size: 0.85rem;">
-            If you didn't request this code, please ignore this email.
-          </p>
-        </div>
-      `,
-    };
-
-    // Race the send against a 12-second timeout
-    const sendPromise = emailTransporter.sendMail(mailOptions);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Email send timed out")), 12000)
-    );
-
-    await Promise.race([sendPromise, timeoutPromise]);
-    return true;
-  } catch (error) {
-    console.error("Failed to send OTP email:", error.message || error);
-    return false;
-  }
+  return sendOTPByBrevo(email, otp);
 }
 
 /**
  * Generate OTP, store it, and attempt to send.
- * Always returns success:true for email method so the login flow proceeds
- * even when the SMTP server is unavailable — the OTP is logged to console.
  */
 async function generateAndSendOTP(email, method = "email") {
   const emailKey = normalizeEmailKey(email);
@@ -118,18 +163,18 @@ async function generateAndSendOTP(email, method = "email") {
     method,
   });
 
-  let sent = false;
-
   if (method === "email") {
-    sent = await sendOTPByEmail(email, otp);
+    const sent = await sendOTPByEmail(email, otp);
     if (!sent) {
-      // SMTP failed — OTP is still valid, log it for dev/testing
       console.warn(`[OTP] Email delivery failed for ${email}. OTP: ${otp}`);
+      return {
+        success: false,
+        expiresIn: 600,
+        message: "Failed to send OTP email via Brevo. Check the verified sender and API key.",
+      };
     }
   }
 
-  // Always return success for email method — OTP is stored and valid
-  // even if the email couldn't be delivered
   return {
     success: true,
     expiresIn: 600, // 10 minutes in seconds
