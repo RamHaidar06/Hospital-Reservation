@@ -6,12 +6,33 @@ const { query } = require("./db");
 const authRoutes = require("./routes/auth");
 const apptRoutes = require("./routes/appointments");
 const usersRoutes = require("./routes/users");
+const adminRoutes = require("./routes/admin");
 const reviewRoutes = require("./routes/reviewRoutes");
 const { startReminderScheduler } = require("./scheduler/reminderScheduler");
 const chatbotController = require("./controllers/chatbotController");
 const auth = require("./middleware/auth");
 
 const app = express();
+
+async function ensureUserModerationColumns() {
+  await query("alter table users add column if not exists is_active boolean not null default true");
+  await query("alter table users add column if not exists approval_status text not null default 'approved'");
+  await query(
+    `do $$
+     begin
+       if not exists (
+         select 1
+         from pg_constraint
+         where conname = 'users_approval_status_check'
+       ) then
+         alter table users
+         add constraint users_approval_status_check
+         check (approval_status in ('pending','approved','rejected'));
+       end if;
+     end
+     $$`
+  );
+}
 
 app.use(
   cors({
@@ -24,6 +45,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/appointments", apptRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/reviews", reviewRoutes);
 
 app.post("/api/chatbot/suggest-doctors", chatbotController.suggestDoctors);
@@ -36,6 +58,7 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 async function startServer() {
   try {
+    await ensureUserModerationColumns();
     await query("select 1");
     console.log("Postgres connected");
     startReminderScheduler();

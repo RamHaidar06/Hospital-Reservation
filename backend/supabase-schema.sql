@@ -2,7 +2,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
-  role text not null check (role in ('patient','doctor')),
+  role text not null check (role in ('patient','doctor','admin')),
   email text not null unique,
   password_hash text not null,
   first_name text default '',
@@ -14,6 +14,8 @@ create table if not exists users (
   license_number text default '',
   years_experience integer default 0,
   bio text default '',
+  is_active boolean not null default true,
+  approval_status text not null default 'approved' check (approval_status in ('pending','approved','rejected')),
   working_days text default 'monday,tuesday,wednesday,thursday,friday',
   start_time text default '09:00',
   end_time text default '17:00',
@@ -54,7 +56,7 @@ create table if not exists reviews (
 create table if not exists trusted_devices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
-  role text not null check (role in ('patient','doctor')),
+  role text not null check (role in ('patient','doctor','admin')),
   token_hash text not null unique,
   user_agent text default '',
   last_used_at timestamptz,

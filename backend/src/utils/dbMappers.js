@@ -14,6 +14,8 @@ function mapUserRow(row) {
     licenseNumber: row.license_number || "",
     yearsExperience: Number(row.years_experience || 0),
     bio: row.bio || "",
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
+    approvalStatus: row.approval_status || "approved",
     workingDays: row.working_days || "",
     startTime: row.start_time || "",
     endTime: row.end_time || "",

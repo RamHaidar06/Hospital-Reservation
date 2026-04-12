@@ -11,7 +11,7 @@ router.get("/doctors", async (req, res) => {
     const doctorsResult = await query(
       `select *
        from users
-       where role = 'doctor'
+       where role = 'doctor' and is_active = true and approval_status = 'approved'
        order by created_at desc`
     );
 

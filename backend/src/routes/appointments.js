@@ -97,7 +97,10 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ message: "Appointment time must be in the future" });
     }
 
-    const doctorCheck = await query("select id from users where id = $1 and role = 'doctor' limit 1", [doctorId]);
+    const doctorCheck = await query(
+      "select id from users where id = $1 and role = 'doctor' and is_active = true and approval_status = 'approved' limit 1",
+      [doctorId]
+    );
     if (!doctorCheck.rows[0]) {
       return res.status(400).json({ message: "Invalid doctorId" });
     }

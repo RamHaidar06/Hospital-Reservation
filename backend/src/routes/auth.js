@@ -41,6 +41,23 @@ async function findUserById(id) {
   return result.rows[0] || null;
 }
 
+function doctorAccessMessage(user) {
+  if (!user || user.role !== "doctor") return "";
+  if (user.is_active === false) {
+    return "Your doctor account has been deactivated by an admin.";
+  }
+
+  const approvalStatus = String(user.approval_status || "approved").toLowerCase();
+  if (approvalStatus === "pending") {
+    return "Your doctor account is pending admin approval.";
+  }
+  if (approvalStatus === "rejected") {
+    return "Your doctor account was rejected. Please contact support.";
+  }
+
+  return "";
+}
+
 router.post("/register", async (req, res) => {
   try {
     const {
@@ -60,12 +77,15 @@ router.post("/register", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const isDoctor = role === "doctor";
+    const approvalStatus = isDoctor ? "pending" : "approved";
+    const isActive = true;
     const result = await query(
       `insert into users (
         email, password_hash, role, first_name, last_name, phone, date_of_birth, address,
-        specialty, license_number, years_experience, bio, working_days, start_time, end_time
+        specialty, license_number, years_experience, bio, is_active, approval_status, working_days, start_time, end_time
       ) values (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
       )
       returning *`,
       [
@@ -81,6 +101,8 @@ router.post("/register", async (req, res) => {
         licenseNumber || "",
         Number.isFinite(+yearsExperience) ? +yearsExperience : 0,
         bio || "",
+        isActive,
+        approvalStatus,
         workingDays || "monday,tuesday,wednesday,thursday,friday",
         startTime || "09:00",
         endTime || "17:00",
@@ -93,7 +115,9 @@ router.post("/register", async (req, res) => {
     const otpResult = await generateAndSendOTP(String(email).trim().toLowerCase(), "email");
     if (otpResult.success) {
       return res.json({
-        message: "Account created! OTP sent to your email. Please verify before logging in.",
+        message: isDoctor
+          ? "Doctor account created. OTP sent to your email. Login will be available after admin approval."
+          : "Account created! OTP sent to your email. Please verify before logging in.",
         requiresOTP: true,
         expiresIn: otpResult.expiresIn,
         user: {
@@ -140,6 +164,11 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    const accessMessage = doctorAccessMessage(user);
+    if (accessMessage) {
+      return res.status(403).json({ message: accessMessage });
+    }
+
     const token = createJwtForUser(user);
 
     res.json({
@@ -155,9 +184,9 @@ router.get("/doctors", async (req, res) => {
   try {
     const result = await query(
       `select id, role, email, first_name, last_name, specialty, license_number,
-              years_experience, bio, working_days, start_time, end_time
+            years_experience, bio, is_active, approval_status, working_days, start_time, end_time
        from users
-       where role = 'doctor'
+       where role = 'doctor' and is_active = true and approval_status = 'approved'
        order by created_at desc`
     );
 
@@ -258,6 +287,11 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
+    const accessMessage = doctorAccessMessage(user);
+    if (accessMessage) {
+      return res.status(403).json({ message: accessMessage });
+    }
+
     const result = await generateAndSendOTP(email, "email");
 
     if (result.success) {
@@ -298,6 +332,11 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(403).json({
         message: `This account is registered as a ${user.role}. Please use the ${user.role} login.`,
       });
+    }
+
+    const accessMessage = doctorAccessMessage(user);
+    if (accessMessage) {
+      return res.status(403).json({ message: accessMessage });
     }
 
     const token = createJwtForUser(user);
@@ -350,6 +389,11 @@ router.post("/login-with-otp", async (req, res) => {
       return res.status(403).json({
         message: `This account is registered as a ${user.role}. Please use the ${user.role} login.`,
       });
+    }
+
+    const accessMessage = doctorAccessMessage(user);
+    if (accessMessage) {
+      return res.status(403).json({ message: accessMessage });
     }
 
     if (trustedDeviceToken) {

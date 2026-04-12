@@ -50,6 +50,19 @@ export default function App() {
   const [otpExpiresIn, setOtpExpiresIn] = useState(600);
   const [otpRememberDeviceWanted, setOtpRememberDeviceWanted] = useState(false);
 
+  const isAdminSession = useMemo(() => {
+    try {
+      const token = localStorage.getItem("token") || "";
+      const payload = token.split(".")[1];
+      if (!payload) return false;
+      const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const data = JSON.parse(atob(normalized));
+      return data?.role === "admin";
+    } catch {
+      return false;
+    }
+  }, [page]);
+
   const [patientTab, setPatientTab] = useState("profile");
   const [doctorTab,  setDoctorTab]  = useState("profile");
 
@@ -295,6 +308,27 @@ export default function App() {
       <div className="glow-orb glow-orb-1" />
       <div className="glow-orb glow-orb-2" />
       <div className="glow-orb glow-orb-3" />
+
+      {isAdminSession ? (
+        <a
+          href="/admin/dashboard"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 18,
+            zIndex: 80,
+            textDecoration: "none",
+            background: "#1b5fbf",
+            color: "#fff",
+            padding: "10px 14px",
+            borderRadius: 12,
+            fontWeight: 700,
+            boxShadow: "0 12px 22px rgba(15, 55, 112, 0.32)",
+          }}
+        >
+          Open Admin Panel
+        </a>
+      ) : null}
 
       {page === "landing" && (
         <LandingPage
