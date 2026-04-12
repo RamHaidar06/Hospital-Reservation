@@ -115,7 +115,7 @@ function parseNaturalDate(input) {
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   if (dateOnly === "today" || /\btoday\b/.test(dateOnly)) return toIsoDate(base);
-  if (dateOnly === "tomorrow" || /\btomorrow\b|\btmrw\b|\btmr\b/.test(dateOnly)) {
+  if (dateOnly === "tomorrow" || /\btomorrow\b|\btomorow\b|\btmrw\b|\btmr\b/.test(dateOnly)) {
     base.setDate(base.getDate() + 1);
     return toIsoDate(base);
   }
@@ -242,9 +242,23 @@ function detectListMode(message) {
   if (/\b(complet[a-z]*|done|finished|past)\b/.test(text)) return "completed";
   if (/\b(pending|open|not completed|incomplete|awaiting|due)\b/.test(text)) return "pending";
   if (/\b(today|todays|to day)\b/.test(text)) return "today";
-  if (/\b(tomorrow|tmrw|tmr)\b/.test(text)) return "tomorrow";
+  if (/\b(tomorrow|tomorow|tmrw|tmr)\b/.test(text)) return "tomorrow";
   if (/\b(upcoming|due|next|future|scheduled)\b/.test(text)) return "upcoming";
   return "all";
+}
+
+function isDateTodayOrFuture(isoDate) {
+  const value = String(isoDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return value >= today;
+}
+
+function isGenericDoctorQuery(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return false;
+  return /\b(which|what|any|show|list)?\s*(doctor|doctors|dr|drs|doc|docs)\b/.test(text);
 }
 
 function formatListAsSentence(items = []) {
@@ -306,10 +320,14 @@ function detectSlotAvailabilityIntent(message, history = []) {
   const hasSlotWords =
     /\b(slot|slots|time slot|time slots|available time|availability|free time|open time|open slot)\b/.test(text) ||
     (/\bavailable\b/.test(text) && /\b(time|times)\b/.test(text));
+  const doctorAvailabilityQuestion =
+    /\b(which|what|any|show|list)\b/.test(text) &&
+    /\b(doctor|doctors|dr|drs)\b/.test(text) &&
+    /\b(available|availability|free|open)\b/.test(text);
   const hasAppointmentContext = /\b(appointment|book|booking|schedule)\b/.test(text);
-  const explicitQuestion = /\b(what|which|show|tell|give|any)\b/.test(text);
+  const explicitQuestion = /\b(what|which|show|tell|give|any|have)\b/.test(text);
 
-  if (hasSlotWords && (hasAppointmentContext || explicitQuestion)) return true;
+  if ((hasSlotWords && (hasAppointmentContext || explicitQuestion)) || doctorAvailabilityQuestion) return true;
 
   const recentAssistant = history
     .slice(-6)
@@ -319,6 +337,14 @@ function detectSlotAvailabilityIntent(message, history = []) {
 
   if (hasSlotWords && /date and time|time would you prefer|what date/.test(recentAssistant)) return true;
   return false;
+}
+
+function isSlotSelectionFollowUp(message, history = []) {
+  const parsedTime = parseNaturalTime(message);
+  if (!parsedTime) return false;
+
+  const context = getRecentAvailabilityContext(history);
+  return Boolean(context.hasAvailabilityContext && (context.doctorHint || context.dateHint));
 }
 
 function getRecentDoctorQueryHint(history = []) {
@@ -421,6 +447,21 @@ function getRecentTimeHint(history = []) {
     if (parsed) return parsed;
   }
   return null;
+}
+
+function getRecentAvailabilityContext(history = []) {
+  const recentAssistantText = history
+    .slice(-8)
+    .filter((item) => (item?.role || item?.type || "") === "assistant")
+    .map((item) => String(item?.text || "").toLowerCase())
+    .join(" \n ");
+
+  return {
+    hasAvailabilityContext: /available slots|available times|available time slots|availability/.test(recentAssistantText),
+    doctorHint: getRecentDoctorQueryHint(history),
+    dateHint: getRecentDateHint(history),
+    timeHint: getRecentTimeHint(history),
+  };
 }
 
 function isAffirmativeReply(message) {
@@ -659,8 +700,8 @@ function extractDoctorQueryFromMessage(message) {
   const withDoctor = text.match(/\bwith\s+(?:dr\.?\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i);
   if (withDoctor) return String(withDoctor[1] || "").trim();
 
-  // Match "dr(.)? name" at start or standalone (e.g., "dr fakhouri", "dr. ahmed")
-  const drPrefix = text.match(/^(?:dr\.?\s+)?([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})$/i);
+  // Match explicit "dr(.)? name" input (e.g., "dr fakhouri", "dr. ahmed")
+  const drPrefix = text.match(/^(?:dr\.?\s+)([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})$/i);
   if (drPrefix && drPrefix[1].toLowerCase() !== "doctor") return String(drPrefix[1] || "").trim();
 
   // Match standalone "dr(.)? name" in text (but not when it's part of a sentence like "i saw dr yesterday")
@@ -669,13 +710,42 @@ function extractDoctorQueryFromMessage(message) {
     if (match) return String(match[1] || "").trim();
   }
 
+  // Accept simple last-name style replies (e.g., "fakhouri"), but avoid common chat words.
+  if (/^[a-zA-Z]{2,30}$/.test(text)) {
+    const blocked = new Set(["what", "which", "when", "where", "doctor", "doctors", "dr", "drs", "help", "have", "available", "slots"]);
+    if (!blocked.has(text.toLowerCase())) return text;
+  }
+
   const inferred = inferSpecialty(text);
   if (inferred) return inferred;
 
   return null;
 }
 
-function extractIntentLocally({ message, history, userRole }) {
+function buildLocalChatReply(message, userName = "") {
+  const text = String(message || "").trim().toLowerCase();
+  const namePart = String(userName || "").trim() ? `, ${String(userName || "").trim()}` : "";
+
+  if (/^(hi|hello|hey|yo|hola)\b/.test(text)) {
+    return `Hi${namePart}. I can help with booking, cancelling, rescheduling, doctor availability, and appointment summaries.`;
+  }
+
+  if (/\b(are you ai|are u ai|are you a bot|are u a bot|who are you)\b/.test(text)) {
+    return "Yes. I am your Gemini-powered medical assistant. I can help you manage appointments and find doctors.";
+  }
+
+  if (/\b(how are you|how r you|how you doing)\b/.test(text)) {
+    return "I am doing well, thank you. How can I help you today with your appointments or doctor search?";
+  }
+
+  if (/\b(i feel|i am feeling|im feeling|i'm feeling|sick|pain|unwell)\b/.test(text)) {
+    return "I am sorry you are not feeling well. Would you like me to help you find an available doctor or book an appointment now?";
+  }
+
+  return "I am here to help. You can ask me to book, cancel, reschedule, list appointments, or check doctor availability.";
+}
+
+function extractIntentLocally({ message, history, userRole, userName }) {
   const text = String(message || "").trim();
   const lower = text.toLowerCase();
 
@@ -691,17 +761,25 @@ function extractIntentLocally({ message, history, userRole }) {
   else if (userRole === "doctor" && detectVisitSummaryIntent(text)) intent = "add_visit_summary";
   else if (userRole === "doctor" && detectCancelByPatientIntent(text)) intent = "cancel_by_patient";
   else if (detectReasonQuery(text, history)) intent = "reason_query";
+  else if (isSlotSelectionFollowUp(text, history)) intent = "availability_query";
   else if (detectSlotAvailabilityIntent(text, history)) intent = "availability_query";
-  else if (/\b(help|what can you do|capabilities|options)\b/.test(lower)) intent = "help";
+  else if (/\b(help|what can you do|what do you have|what do u have|capabilities|options)\b/.test(lower)) intent = "help";
   else if (/\b(reschedule|change|move)\b/.test(lower)) intent = "reschedule";
   else if (/\b(cancel|remove|delete)\b/.test(lower) && /\bappointment\b/.test(lower)) intent = "cancel";
   else if (/\b(book|schedule|new appointment|make appointment)\b/.test(lower)) intent = "book";
   else if (/\bappointments?\b|\bschedule\b|\btoday\b|\btomorrow\b|\bupcoming\b|\bcompleted\b|\bpending\b/.test(lower)) intent = "list_appointments";
   else if (/\bdoctor\b|\bspecialty\b|\bcardio|derma|neuro|pedia|ortho|gastro\b/.test(lower)) intent = "doctor_info";
 
+  const localReply =
+    intent === "help"
+      ? "I can help you book, cancel, or reschedule appointments, list your appointments, check doctor availability, and share doctor info."
+      : intent === "chat"
+        ? buildLocalChatReply(text, userName)
+        : null;
+
   return {
     intent,
-    reply: null,
+    reply: localReply,
     doctorQuery: doctorQuery || null,
     doctorId: null,
     appointmentId: null,
@@ -720,7 +798,7 @@ function extractIntentLocally({ message, history, userRole }) {
 
 async function extractIntentSmart({ message, history, userRole, userName, doctors, appointments }) {
   if (!geminiClient) {
-    return extractIntentLocally({ message, history, userRole });
+    return extractIntentLocally({ message, history, userRole, userName });
   }
 
   try {
@@ -742,7 +820,7 @@ async function extractIntentSmart({ message, history, userRole, userName, doctor
     };
   } catch (error) {
     console.warn("Gemini unavailable, using local fallback:", error?.message || error);
-    return extractIntentLocally({ message, history, userRole });
+    return extractIntentLocally({ message, history, userRole, userName });
   }
 }
 
@@ -1169,16 +1247,22 @@ async function chatWithGemini(req, res) {
     }
 
     if (intent === "availability_query" || detectSlotAvailabilityIntent(message, history)) {
+      const availabilityContext = getRecentAvailabilityContext(history);
       const doctorQuery = String(
         extracted.doctorQuery ||
           extractDoctorQueryFromMessage(message) ||
+          availabilityContext.doctorHint ||
           getRecentDoctorQueryHint(history) ||
           ""
       ).trim();
 
-      if (!doctorQuery) {
+      if (!doctorQuery || isGenericDoctorQuery(doctorQuery)) {
+        const doctorList = doctors
+          .slice(0, 6)
+          .map((doctor, index) => `${index + 1}. Dr. ${doctor.firstName} ${doctor.lastName} - ${doctor.specialty || "General Medicine"}`)
+          .join("\n");
         return res.json({
-          reply: "Could you please tell me which doctor or specialty you want available slots for?",
+          reply: `I can check availability for these doctors:\n\n${doctorList}\n\nTell me a doctor name and date (for example: "Dr. Hadi Fakhouri tomorrow").`,
         });
       }
 
@@ -1204,10 +1288,34 @@ async function chatWithGemini(req, res) {
       }
 
       const doctor = candidateDoctors[0];
+      const parsedModelDate = parseNaturalDate(extracted.appointmentDate || "");
+      const parsedUserTime = parseNaturalTime(message) || availabilityContext.timeHint || null;
       const requestedDate =
         parseNaturalDate(message) ||
-        parseNaturalDate(extracted.appointmentDate || "") ||
-        getRecentDateHint(history);
+        availabilityContext.dateHint ||
+        getRecentDateHint(history) ||
+        (isDateTodayOrFuture(parsedModelDate) ? parsedModelDate : null);
+
+      if (parsedUserTime && availabilityContext.hasAvailabilityContext && requestedDate) {
+        const bookedResult = await query(
+          `select appointment_time
+           from appointments
+           where doctor_id = $1 and appointment_date = $2 and status <> 'cancelled'`,
+          [doctor.id, requestedDate]
+        );
+        const bookedTimes = bookedResult.rows.map((row) => row.appointment_time);
+        const availableSlots = generateSlotsFallback(doctor, requestedDate, bookedTimes);
+
+        if (availableSlots.includes(parsedUserTime)) {
+          return res.json({
+            reply: `Great. I have ${parsedUserTime} available with Dr. ${doctor.firstName} ${doctor.lastName} on ${requestedDate}. What is the reason for the appointment?`,
+          });
+        }
+
+        return res.json({
+          reply: `I do not see ${parsedUserTime} available for Dr. ${doctor.firstName} ${doctor.lastName} on ${requestedDate}. Please choose one of these: ${availableSlots.slice(0, 10).join(", ")}`,
+        });
+      }
 
       if (!requestedDate) {
         return res.json({
@@ -1395,7 +1503,9 @@ async function chatWithGemini(req, res) {
         (isAffirmativeReply(message) && askedTomorrowDate ? parseNaturalDate("tomorrow") : null) ||
         parseNaturalDate(message) ||
         getRecentDateHint(history) ||
-        parseNaturalDate(extracted.appointmentDate || "");
+        (isDateTodayOrFuture(parseNaturalDate(extracted.appointmentDate || ""))
+          ? parseNaturalDate(extracted.appointmentDate || "")
+          : null);
       const appointmentTime =
         parseNaturalTime(message) ||
         getRecentTimeHint(history) ||
