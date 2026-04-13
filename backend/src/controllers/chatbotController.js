@@ -16,6 +16,8 @@ const geminiClient = geminiApiKey
   ? new GoogleGenAI({ apiKey: geminiApiKey })
   : null;
 
+let geminiFallbackWarned = false;
+
 const SYMPTOM_SPECIALTY_MAP = {
   chest: "cardiology",
   heart: "cardiology",
@@ -469,6 +471,61 @@ function isAffirmativeReply(message) {
   return /^(yes|yeah|yep|yup|ok|okay|sure|correct|right|exactly)$/i.test(text);
 }
 
+function isDoctorSelectionFollowUp(message, history = []) {
+  const text = String(message || "").toLowerCase();
+  const recentAssistant = history
+    .slice(-6)
+    .filter((item) => (item?.role || item?.type || "") === "assistant")
+    .map((item) => String(item?.text || "").toLowerCase())
+    .join(" \n ");
+  
+  const hasDoctorSelection = /which doctor|doctor or specialty|pick a doctor|choose a doctor/i.test(recentAssistant);
+  const hasDoctorName = /^[a-zA-Z]{2,30}$/.test(String(message || "").trim());
+  
+  return hasDoctorSelection && hasDoctorName;
+}
+
+function isBookingConfirmationFollowUp(message, history = []) {
+  if (!isAffirmativeReply(message)) return false;
+  
+  const recentAssistant = history
+    .slice(-6)
+    .filter((item) => (item?.role || item?.type || "") === "assistant")
+    .map((item) => String(item?.text || "").toLowerCase())
+    .join(" \n ");
+  
+  return /confirm.*booking|confirm.*appointment|confirm.*details|is this correct/.test(recentAssistant);
+}
+
+function isBookingDetailsFollowUp(message, history = []) {
+  const text = String(message || "").toLowerCase();
+  
+  const recentAssistant = history
+    .slice(-4)
+    .filter((item) => (item?.role || item?.type || "") === "assistant")
+    .map((item) => String(item?.text || "").toLowerCase())
+    .join(" \n ");
+  
+  const askedForDetails = /date.*time.*reason|date.*and.*time|time.*and.*reason|what date|what time/.test(recentAssistant);
+  
+  const hasDate = Boolean(parseNaturalDate(text));
+  const hasTime = Boolean(parseNaturalTime(text));
+  const reasonKeywords = ["broken", "pain", "follow-up", "checkup", "rash", "fever", "headache", "injury", "finger", "back", "stomach", "chest"];
+  const hasReason = reasonKeywords.some((kw) => text.includes(kw));
+  
+  return askedForDetails && (hasDate || hasTime || hasReason);
+}
+
+function didBotAskForReason(history = []) {
+  const recentAssistant = history
+    .slice(-4)
+    .filter((item) => (item?.role || item?.type || "") === "assistant")
+    .map((item) => String(item?.text || "").toLowerCase())
+    .join(" \n ");
+
+  return /what is the reason|reason for (the )?appointment|reason for this visit|what.*reason/.test(recentAssistant);
+}
+
 function inferListModeFromHistory(history = []) {
   const recentAssistantText = history
     .slice(-10)
@@ -689,6 +746,15 @@ function extractBookingReasonFromMessage(message) {
     if (candidate && !isTemporalOnlyText(candidate)) return candidate;
   }
 
+  // If no explicit "reason:" pattern, check if message contains medical keywords
+  const medicalKeywords = ["broken", "pain", "follow-up", "checkup", "rash", "fever", "headache", "injury", "finger", "back", "stomach", "chest", "cough", "cold", "flu", "nausea", "dizziness", "weakness"];
+  const lowerText = text.toLowerCase();
+  
+  // Return the whole message if it contains medical keywords and isn't just temporal info
+  if (medicalKeywords.some((kw) => lowerText.includes(kw)) && !isTemporalOnlyText(text)) {
+    return text;
+  }
+
   return null;
 }
 
@@ -712,7 +778,7 @@ function extractDoctorQueryFromMessage(message) {
 
   // Accept simple last-name style replies (e.g., "fakhouri"), but avoid common chat words.
   if (/^[a-zA-Z]{2,30}$/.test(text)) {
-    const blocked = new Set(["what", "which", "when", "where", "doctor", "doctors", "dr", "drs", "help", "have", "available", "slots"]);
+    const blocked = new Set(["hello", "hi", "hey", "yo", "hola", "what", "which", "when", "where", "why", "doctor", "doctors", "dr", "drs", "doc", "docs", "help", "have", "available", "slots", "book", "booking", "appointment", "appointments"]);
     if (!blocked.has(text.toLowerCase())) return text;
   }
 
@@ -761,6 +827,10 @@ function extractIntentLocally({ message, history, userRole, userName }) {
   else if (userRole === "doctor" && detectVisitSummaryIntent(text)) intent = "add_visit_summary";
   else if (userRole === "doctor" && detectCancelByPatientIntent(text)) intent = "cancel_by_patient";
   else if (detectReasonQuery(text, history)) intent = "reason_query";
+  else if (didBotAskForReason(history) && text) intent = "book";
+  else if (isBookingDetailsFollowUp(text, history)) intent = "book";
+  else if (isBookingConfirmationFollowUp(text, history)) intent = "book";
+  else if (isDoctorSelectionFollowUp(text, history)) intent = "book";
   else if (isSlotSelectionFollowUp(text, history)) intent = "availability_query";
   else if (detectSlotAvailabilityIntent(text, history)) intent = "availability_query";
   else if (/\b(help|what can you do|what do you have|what do u have|capabilities|options)\b/.test(lower)) intent = "help";
@@ -819,7 +889,10 @@ async function extractIntentSmart({ message, history, userRole, userName, doctor
       engine: "gemini",
     };
   } catch (error) {
-    console.warn("Gemini unavailable, using local fallback:", error?.message || error);
+    if (!geminiFallbackWarned) {
+      geminiFallbackWarned = true;
+      console.warn("Gemini unavailable, using local fallback:", error?.message || error);
+    }
     return extractIntentLocally({ message, history, userRole, userName });
   }
 }
@@ -1444,7 +1517,10 @@ async function chatWithGemini(req, res) {
         return res.json({ reply: "Only patients can book appointments on this website." });
       }
 
-      const doctorQuery = String(extracted.doctorQuery || extracted.reason || "").trim();
+      let doctorQuery = String(extracted.doctorQuery || extracted.reason || "").trim();
+      if (!doctorQuery) {
+        doctorQuery = getRecentDoctorQueryHint(history) || "";
+      }
       const candidateDoctors = extracted.doctorId
         ? doctors.filter((doctor) => String(doctor.id) === String(extracted.doctorId))
         : doctorQuery
@@ -1510,7 +1586,14 @@ async function chatWithGemini(req, res) {
         parseNaturalTime(message) ||
         getRecentTimeHint(history) ||
         parseNaturalTime(extracted.appointmentTime || "");
-      const bookingReason = String(extracted.reason || "").trim();
+      let bookingReason = String(extracted.reason || "").trim();
+
+      if (!bookingReason && didBotAskForReason(history)) {
+        const reasonFromMessage = String(message || "").trim();
+        if (reasonFromMessage && !isTemporalOnlyText(reasonFromMessage)) {
+          bookingReason = reasonFromMessage;
+        }
+      }
 
       if (!appointmentDate || !appointmentTime) {
         return res.json({
@@ -1522,12 +1605,17 @@ async function chatWithGemini(req, res) {
       }
 
       if (!bookingReason || bookingReason.length < 3) {
-        return res.json({
-          reply: toPoliteClarification(
-            extracted.clarification,
-            "Could you please share the reason for the appointment (for example: chest pain, follow-up, or skin rash)?"
-          ),
-        });
+        const fallbackReason = isBookingConfirmationFollowUp(message, history) ? "General consultation" : "";
+        if (!fallbackReason) {
+          return res.json({
+            reply: toPoliteClarification(
+              extracted.clarification,
+              "Could you please share the reason for the appointment (for example: chest pain, follow-up, or skin rash)?"
+            ),
+          });
+        } else {
+          bookingReason = fallbackReason;
+        }
       }
 
       if (isTemporalOnlyText(bookingReason)) {
