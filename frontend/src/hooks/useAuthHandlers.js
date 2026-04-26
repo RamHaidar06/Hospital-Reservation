@@ -386,28 +386,105 @@ export default function useAuthHandlers({
     setOtpRememberDeviceWanted(false);
   }
 
-  function handlePatientForgotSubmit(e) {
+  async function handlePatientForgotSubmit(e) {
     e.preventDefault();
 
-    if (!validateEmail(patientForgotEmail.trim())) {
+    const email = patientForgotEmail.trim();
+
+    if (!validateEmail(email)) {
       return showMessage("✗ Invalid email format", "error");
     }
 
-    showMessage("✓ Recovery link sent (demo)", "success");
-    setPatientForgotEmail("");
-    setTimeout(() => setPatientAuthView("login"), 900);
+    try {
+      await apiFetch("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email, role: "patient" }),
+      });
+
+      showMessage("✓ If your account exists, a reset link was sent to your email", "success");
+      setPatientForgotEmail("");
+      setTimeout(() => setPatientAuthView("login"), 900);
+    } catch (err) {
+      showMessage("✗ " + (err?.message || "Unable to send recovery email"), "error");
+    }
   }
 
-  function handleDoctorForgotSubmit(e) {
+  async function handleDoctorForgotSubmit(e) {
     e.preventDefault();
 
-    if (!validateEmail(doctorForgotEmail.trim())) {
+    const email = doctorForgotEmail.trim();
+
+    if (!validateEmail(email)) {
       return showMessage("✗ Invalid email format", "error");
     }
 
-    showMessage("✓ Recovery link sent (demo)", "success");
-    setDoctorForgotEmail("");
-    setTimeout(() => setDoctorAuthView("login"), 900);
+    try {
+      await apiFetch("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({ email, role: "doctor" }),
+      });
+
+      showMessage("✓ If your account exists, a reset link was sent to your email", "success");
+      setDoctorForgotEmail("");
+      setTimeout(() => setDoctorAuthView("login"), 900);
+    } catch (err) {
+      showMessage("✗ " + (err?.message || "Unable to send recovery email"), "error");
+    }
+  }
+
+  async function handlePasswordResetSubmit({ role, token, email, newPassword, confirmPassword }) {
+    const normalizedRole = String(role || "").toLowerCase() === "doctor" ? "doctor" : "patient";
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const normalizedToken = String(token || "").trim();
+
+    if (!validateEmail(normalizedEmail)) {
+      showMessage("✗ Invalid reset email", "error");
+      return false;
+    }
+
+    if (!normalizedToken) {
+      showMessage("✗ Invalid or missing reset token", "error");
+      return false;
+    }
+
+    if (!validatePassword(newPassword || "")) {
+      showMessage("✗ Password must be at least 6 characters", "error");
+      return false;
+    }
+
+    if (String(newPassword || "") !== String(confirmPassword || "")) {
+      showMessage("✗ Passwords do not match", "error");
+      return false;
+    }
+
+    try {
+      await apiFetch("/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({
+          role: normalizedRole,
+          token: normalizedToken,
+          email: normalizedEmail,
+          newPassword,
+        }),
+      });
+
+      const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+
+      if (normalizedRole === "doctor") {
+        setDoctorAuthView("login");
+        setDoctorLogin((prev) => ({ ...prev, email: normalizedEmail, password: "", rememberMe: false }));
+      } else {
+        setPatientAuthView("login");
+        setPatientLogin((prev) => ({ ...prev, email: normalizedEmail, password: "", rememberMe: false }));
+      }
+
+      showMessage("✓ Password reset successful. Please log in.", "success");
+      return true;
+    } catch (err) {
+      showMessage("✗ " + (err?.message || "Unable to reset password"), "error");
+      return false;
+    }
   }
 
   function logoutPatient() {
@@ -435,6 +512,7 @@ export default function useAuthHandlers({
     handleDoctorRegisterSubmit,
     handlePatientForgotSubmit,
     handleDoctorForgotSubmit,
+    handlePasswordResetSubmit,
     handleOTPVerificationSuccess,
     logoutPatient,
     logoutDoctor,

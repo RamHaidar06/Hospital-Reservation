@@ -7,9 +7,11 @@ const auth = require("../middleware/auth");
 const { query, withTransaction } = require("../db");
 const { mapUserRow } = require("../utils/dbMappers");
 const { generateAndSendOTP, verifyOTP } = require("../services/otpService");
+const { sendPasswordResetEmail } = require("../../utils/mailer");
 
 const router = express.Router();
 const TRUSTED_DEVICE_DAYS = 30;
+const RESET_TOKEN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 30);
 
 function createJwtForUser(user) {
   return jwt.sign(
@@ -29,6 +31,20 @@ function hashTrustedToken(token) {
 
 function generateTrustedDeviceToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+
+function generatePasswordResetToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function hashPasswordResetToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function normalizeRole(value) {
+  const role = String(value || "").trim().toLowerCase();
+  if (role === "doctor" || role === "patient") return role;
+  return "";
 }
 
 async function findUserByEmail(email) {
@@ -262,6 +278,116 @@ router.patch("/doctors/:id/availability", auth, async (req, res) => {
     const result = await query(`update users set ${setClause}, updated_at = now() where id = $1 returning *`, params);
 
     res.json(toUserPayload(result.rows[0]));
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.post("/forgot-password", async (req, res) => {
+  const genericSuccess = {
+    message: "If that account exists, a password reset link has been sent.",
+  };
+
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const role = normalizeRole(req.body.role);
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.json(genericSuccess);
+    }
+
+    if (role && user.role !== role) {
+      return res.json(genericSuccess);
+    }
+
+    const rawToken = generatePasswordResetToken();
+    const tokenHash = hashPasswordResetToken(rawToken);
+
+    await query(
+      `insert into password_reset_tokens (user_id, token_hash, expires_at)
+       values ($1, $2, now() + ($3 || ' minutes')::interval)`,
+      [user.id, tokenHash, String(RESET_TOKEN_TTL_MINUTES)]
+    );
+
+    const frontendBase = String(process.env.FRONTEND_URL || process.env.APP_URL || "http://localhost:5173").replace(/\/$/, "");
+    const resetUrl = `${frontendBase}/?mode=reset-password&token=${encodeURIComponent(rawToken)}&email=${encodeURIComponent(
+      user.email
+    )}&role=${encodeURIComponent(user.role)}`;
+
+    try {
+      await sendPasswordResetEmail({
+        email: user.email,
+        name: [user.first_name, user.last_name].filter(Boolean).join(" ") || user.first_name || "there",
+        role: user.role,
+        resetUrl,
+        expiresMinutes: RESET_TOKEN_TTL_MINUTES,
+      });
+    } catch (mailErr) {
+      console.error("Password reset email error:", mailErr.message || mailErr);
+    }
+
+    res.json(genericSuccess);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const role = normalizeRole(req.body.role);
+    const token = String(req.body.token || "").trim();
+    const newPassword = String(req.body.newPassword || "");
+
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ message: "Email, token, and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const tokenHash = hashPasswordResetToken(token);
+    const tokenResult = await query(
+      `select pr.id, pr.user_id, pr.expires_at, pr.used_at, u.email, u.role
+       from password_reset_tokens pr
+       join users u on u.id = pr.user_id
+       where pr.token_hash = $1 and u.email = $2
+       order by pr.created_at desc
+       limit 1`,
+      [tokenHash, email]
+    );
+
+    const tokenRow = tokenResult.rows[0];
+    if (!tokenRow) {
+      return res.status(400).json({ message: "Invalid or expired reset link" });
+    }
+
+    if (role && tokenRow.role !== role) {
+      return res.status(400).json({ message: "Invalid or expired reset link" });
+    }
+
+    if (tokenRow.used_at) {
+      return res.status(400).json({ message: "This reset link has already been used" });
+    }
+
+    if (new Date(tokenRow.expires_at).getTime() < Date.now()) {
+      return res.status(400).json({ message: "Reset link has expired" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await withTransaction(async (client) => {
+      await client.query("update users set password_hash = $1, updated_at = now() where id = $2", [passwordHash, tokenRow.user_id]);
+      await client.query("update password_reset_tokens set used_at = now() where user_id = $1 and used_at is null", [tokenRow.user_id]);
+    });
+
+    res.json({ message: "Password reset successful" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

@@ -4,7 +4,14 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 // Longer timeout for endpoints that send emails (OTP, notifications)
-const SLOW_ENDPOINTS = ["/auth/login-with-otp", "/auth/send-otp", "/auth/verify-otp", "/chat"];
+const SLOW_ENDPOINTS = [
+  "/auth/login-with-otp",
+  "/auth/send-otp",
+  "/auth/verify-otp",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/chat",
+];
 const SLOW_TIMEOUT_MS = 30_000;
 
 export function getToken() {

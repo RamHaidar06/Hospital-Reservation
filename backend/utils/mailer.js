@@ -614,6 +614,46 @@ async function sendAppointmentCancelledEmail({
   };
 }
 
+async function sendPasswordResetEmail({ email, name, role, resetUrl, expiresMinutes = 30 }) {
+  if (!email) return { skipped: true, reason: "Missing recipient email" };
+  if (!resetUrl) return { skipped: true, reason: "Missing reset URL" };
+  if (!hasMailConfig()) return { skipped: true, reason: "Missing SMTP configuration" };
+
+  const tx = getTransporter();
+  if (!tx) return { skipped: true, reason: "SMTP transporter unavailable" };
+
+  const from = process.env.MAIL_FROM || process.env.SMTP_USER;
+  const safeName = String(name || "there").trim() || "there";
+  const safeRole = String(role || "patient").toLowerCase() === "doctor" ? "doctor" : "patient";
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;">
+      <h2 style="margin:0 0 12px;color:#0ea5e9;">Reset Your Password</h2>
+      <p>Hello ${safeName},</p>
+      <p>We received a request to reset your ${safeRole} account password.</p>
+      <p style="margin:20px 0;text-align:center;">
+        <a href="${resetUrl}"
+           style="background:#0284c7;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;">
+          Reset Password
+        </a>
+      </p>
+      <p style="margin:0 0 8px;">This link expires in <strong>${Number(expiresMinutes) || 30} minutes</strong>.</p>
+      <p style="color:#6b7280;font-size:0.9rem;margin:12px 0 0;">
+        If you did not request this, you can safely ignore this email.
+      </p>
+    </div>`;
+
+  await tx.sendMail({
+    from,
+    to: email,
+    subject: "MediCare Password Reset",
+    html,
+  });
+
+  console.log(`[Mail][password-reset] template -> ${maskEmail(email)}`);
+  return { skipped: false, recipient: maskEmail(email) };
+}
+
 module.exports = {
   sendAppointmentConfirmationEmail,
   sendAppointmentReminderEmail,
@@ -621,4 +661,5 @@ module.exports = {
   sendAppointmentAutoCancelledEmail,
   sendAppointmentRescheduledEmail,
   sendAppointmentCancelledEmail,
+  sendPasswordResetEmail,
 };

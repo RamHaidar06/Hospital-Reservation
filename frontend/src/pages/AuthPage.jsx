@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+
 export default function AuthPage({
   page,
   setPage,
@@ -25,8 +27,29 @@ export default function AuthPage({
   handleDoctorRegisterSubmit,
   handlePatientForgotSubmit,
   handleDoctorForgotSubmit,
+  handlePasswordResetSubmit,
 }) {
   if (page !== "auth") return null;
+
+  const [patientResetPassword, setPatientResetPassword] = useState("");
+  const [patientResetConfirmPassword, setPatientResetConfirmPassword] = useState("");
+  const [doctorResetPassword, setDoctorResetPassword] = useState("");
+  const [doctorResetConfirmPassword, setDoctorResetConfirmPassword] = useState("");
+
+  const resetLinkData = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get("mode") || "").trim().toLowerCase();
+    const token = String(params.get("token") || "").trim();
+    const email = String(params.get("email") || "").trim().toLowerCase();
+    const role = String(params.get("role") || "").trim().toLowerCase() === "doctor" ? "doctor" : "patient";
+    return {
+      mode,
+      token,
+      email,
+      role,
+      valid: mode === "reset-password" && !!token && !!email,
+    };
+  }, []);
 
   function goToHomepage() {
     setActiveAuthRole("patient");
@@ -332,6 +355,90 @@ export default function AuthPage({
                 <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
                   Go Back to Homepage
                 </button>
+              </div>
+            )}
+
+            {patientAuthView === "reset" && (
+              <div className="glass" style={{ padding: 40 }}>
+                <div style={{ textAlign: "center", marginBottom: 32 }}>
+                  <h3 style={{ margin: "0 0 8px 0" }}>Set New Password</h3>
+                  <p style={{ color: "var(--text-secondary)", margin: 0, fontSize: "0.9rem" }}>
+                    Choose a new password for your patient account
+                  </p>
+                </div>
+
+                {!resetLinkData.valid || resetLinkData.role !== "patient" ? (
+                  <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+                    Invalid or missing reset link. Please request a new one.
+                  </p>
+                ) : null}
+
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const ok = await handlePasswordResetSubmit({
+                      role: "patient",
+                      token: resetLinkData.token,
+                      email: resetLinkData.email || patientForgotEmail,
+                      newPassword: patientResetPassword,
+                      confirmPassword: patientResetConfirmPassword,
+                    });
+                    if (ok) {
+                      setPatientResetPassword("");
+                      setPatientResetConfirmPassword("");
+                    }
+                  }}
+                >
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
+                      Email
+                    </label>
+                    <input className="input-field" type="email" value={resetLinkData.email || patientForgotEmail} readOnly />
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
+                      New Password
+                    </label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      value={patientResetPassword}
+                      onChange={(e) => setPatientResetPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 24 }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
+                      Confirm New Password
+                    </label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      value={patientResetConfirmPassword}
+                      onChange={(e) => setPatientResetConfirmPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary" style={{ width: "100%", padding: 16, fontWeight: 600 }}>
+                    Update Password
+                  </button>
+                </form>
+
+                <p style={{ textAlign: "center", color: "var(--text-secondary)", marginTop: 20, fontSize: "0.9rem" }}>
+                  Back to{" "}
+                  <button
+                    type="button"
+                    onClick={() => setPatientAuthView("login")}
+                    style={{ background: "none", border: "none", color: "var(--cyan-bright)", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    login
+                  </button>
+                </p>
               </div>
             )}
           </>
@@ -647,6 +754,90 @@ export default function AuthPage({
                 <button type="button" className="btn-secondary" style={{ width: "100%", marginTop: 20 }} onClick={goToHomepage}>
                   Go Back to Homepage
                 </button>
+              </div>
+            )}
+
+            {doctorAuthView === "reset" && (
+              <div className="glass" style={{ padding: 40 }}>
+                <div style={{ textAlign: "center", marginBottom: 32 }}>
+                  <h3 style={{ margin: "0 0 8px 0" }}>Set New Password</h3>
+                  <p style={{ color: "var(--text-secondary)", margin: 0, fontSize: "0.9rem" }}>
+                    Choose a new password for your doctor account
+                  </p>
+                </div>
+
+                {!resetLinkData.valid || resetLinkData.role !== "doctor" ? (
+                  <p style={{ color: "var(--text-secondary)", marginBottom: 16 }}>
+                    Invalid or missing reset link. Please request a new one.
+                  </p>
+                ) : null}
+
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const ok = await handlePasswordResetSubmit({
+                      role: "doctor",
+                      token: resetLinkData.token,
+                      email: resetLinkData.email || doctorForgotEmail,
+                      newPassword: doctorResetPassword,
+                      confirmPassword: doctorResetConfirmPassword,
+                    });
+                    if (ok) {
+                      setDoctorResetPassword("");
+                      setDoctorResetConfirmPassword("");
+                    }
+                  }}
+                >
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
+                      Email
+                    </label>
+                    <input className="input-field" type="email" value={resetLinkData.email || doctorForgotEmail} readOnly />
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
+                      New Password
+                    </label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      value={doctorResetPassword}
+                      onChange={(e) => setDoctorResetPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 24 }}>
+                    <label style={{ display: "block", fontWeight: 700, color: "var(--text-primary)", marginBottom: 8, fontSize: "0.9rem" }}>
+                      Confirm New Password
+                    </label>
+                    <input
+                      className="input-field"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      value={doctorResetConfirmPassword}
+                      onChange={(e) => setDoctorResetConfirmPassword(e.target.value)}
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary" style={{ width: "100%", padding: 16, fontWeight: 600 }}>
+                    Update Password
+                  </button>
+                </form>
+
+                <p style={{ textAlign: "center", color: "var(--text-secondary)", marginTop: 20, fontSize: "0.9rem" }}>
+                  Back to{" "}
+                  <button
+                    type="button"
+                    onClick={() => setDoctorAuthView("login")}
+                    style={{ background: "none", border: "none", color: "var(--cyan-bright)", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    login
+                  </button>
+                </p>
               </div>
             )}
           </>

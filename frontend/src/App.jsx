@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import "./App.css";
 
 import AuthPage    from "./pages/AuthPage";
@@ -111,6 +111,7 @@ export default function App() {
     handlePatientLoginSubmit, handlePatientRegisterSubmit,
     handleDoctorLoginSubmit,  handleDoctorRegisterSubmit,
     handlePatientForgotSubmit, handleDoctorForgotSubmit,
+    handlePasswordResetSubmit,
     handleOTPVerificationSuccess,
     logoutPatient, logoutDoctor,
   } = useAuthHandlers({
@@ -126,6 +127,26 @@ export default function App() {
     // OTP handlers
     setAwaitingOTP, setOtpEmail, setOtpUserRole, setOtpExpiresIn, setOtpRememberDeviceWanted, otpUserRole,
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get("mode") || "").trim().toLowerCase();
+    const token = String(params.get("token") || "").trim();
+    const email = String(params.get("email") || "").trim().toLowerCase();
+    const role = String(params.get("role") || "").trim().toLowerCase() === "doctor" ? "doctor" : "patient";
+
+    if (mode !== "reset-password" || !token || !email) return;
+
+    setPage("auth");
+    setActiveAuthRole(role);
+    if (role === "doctor") {
+      setDoctorAuthView("reset");
+      setDoctorForgotEmail(email);
+    } else {
+      setPatientAuthView("reset");
+      setPatientForgotEmail(email);
+    }
+  }, []);
 
   const selectedDoctor = useMemo(() => {
     if (!selectedDoctorId) return null;
@@ -357,6 +378,7 @@ export default function App() {
         handleDoctorRegisterSubmit={handleDoctorRegisterSubmit}
         handlePatientForgotSubmit={handlePatientForgotSubmit}
         handleDoctorForgotSubmit={handleDoctorForgotSubmit}
+        handlePasswordResetSubmit={handlePasswordResetSubmit}
       />
 
       <RoleSelectorModal authRoleModal={authRoleModal} closeAuthSelector={closeAuthSelector} selectRole={selectRole} />
