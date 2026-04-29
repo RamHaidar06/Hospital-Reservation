@@ -68,6 +68,7 @@ app.get("/api/chatbot/doctors/:doctorId", chatbotController.getDoctorDetails);
 app.post("/api/chatbot/doctors/:doctorId/available-slots", chatbotController.getAvailableSlots);
 app.get("/api/chatbot/my-appointments", auth, chatbotController.getMyAppointments);
 app.post("/api/chat", auth, chatbotController.chatWithGemini);
+app.get("/api/chatbot/health", chatbotController.healthCheck);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

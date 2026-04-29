@@ -18,6 +18,15 @@ const geminiClient = geminiApiKey
 
 let geminiFallbackWarned = false;
 
+// Log initialization status
+if (!geminiApiKey) {
+  console.warn("⚠️  GEMINI_API_KEY not configured - chatbot will use local fallback only");
+} else if (!geminiClient) {
+  console.warn("⚠️  Gemini client failed to initialize");
+} else {
+  console.log("✅ Gemini API client initialized successfully");
+}
+
 const SYMPTOM_SPECIALTY_MAP = {
   chest: "cardiology",
   heart: "cardiology",
@@ -135,6 +144,33 @@ function parseNaturalDate(input) {
     if (delta === 0 || nextWeekdayMatch[1]) delta += 7;
     base.setDate(base.getDate() + delta);
     return toIsoDate(base);
+  }
+
+  // Handle month + day patterns like "april 30", "30 april", "april 30, 2026"
+  const months = {
+    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9,
+    oct: 10, nov: 11, dec: 12
+  };
+  
+  // Pattern: "month day" or "day month" (e.g., "april 30" or "30 april")
+  const monthDayMatch = dateOnly.match(/^(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{1,2})(?:[,\s]+(\d{4}))?$/i) ||
+                        dateOnly.match(/^(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)(?:[,\s]+(\d{4}))?$/i);
+  if (monthDayMatch) {
+    let monthStr, dayStr, yearStr;
+    if (/^\d{1,2}/.test(dateOnly)) {
+      [, dayStr, monthStr, yearStr] = monthDayMatch;
+    } else {
+      [, monthStr, dayStr, yearStr] = monthDayMatch;
+    }
+    const month = months[monthStr.toLowerCase()];
+    const day = Number(dayStr);
+    const year = yearStr ? Number(yearStr) : now.getFullYear();
+    if (month && day >= 1 && day <= 31) {
+      const date = new Date(year, month - 1, day);
+      if (!Number.isNaN(date.getTime())) return toIsoDate(date);
+    }
   }
 
   const normalized = dateOnly.replace(/\//g, "-");
@@ -506,14 +542,19 @@ function isBookingDetailsFollowUp(message, history = []) {
     .map((item) => String(item?.text || "").toLowerCase())
     .join(" \n ");
   
-  const askedForDetails = /date.*time.*reason|date.*and.*time|time.*and.*reason|what date|what time/.test(recentAssistant);
+  // Must have explicitly asked for booking details, not just any date/time question
+  const askedForBookingDetails = /what date.*time.*book|what date.*time.*appoint|when.*book|when.*schedule|book.*when|schedule.*when/.test(recentAssistant);
   
   const hasDate = Boolean(parseNaturalDate(text));
   const hasTime = Boolean(parseNaturalTime(text));
-  const reasonKeywords = ["broken", "pain", "follow-up", "checkup", "rash", "fever", "headache", "injury", "finger", "back", "stomach", "chest"];
-  const hasReason = reasonKeywords.some((kw) => text.includes(kw));
   
-  return askedForDetails && (hasDate || hasTime || hasReason);
+  // Only consider it a reason if bot explicitly asked "what is the reason" or similar
+  const botAskedForReason = /reason for.*book|reason for.*appoint|reason.*appointment|appointment reason|booking reason/.test(recentAssistant);
+  const reasonKeywords = ["broken", "pain", "follow-up", "checkup", "rash", "fever", "headache", "injury", "finger", "back", "stomach", "chest"];
+  const hasExplicitReason = botAskedForReason && reasonKeywords.some((kw) => text.includes(kw));
+  
+  // Must match strict booking context, not just any health question
+  return askedForBookingDetails && (hasDate || hasTime || hasExplicitReason);
 }
 
 function didBotAskForReason(history = []) {
@@ -746,14 +787,13 @@ function extractBookingReasonFromMessage(message) {
     if (candidate && !isTemporalOnlyText(candidate)) return candidate;
   }
 
-  // If no explicit "reason:" pattern, check if message contains medical keywords
-  const medicalKeywords = ["broken", "pain", "follow-up", "checkup", "rash", "fever", "headache", "injury", "finger", "back", "stomach", "chest", "cough", "cold", "flu", "nausea", "dizziness", "weakness"];
+  // If no explicit "reason:" pattern, return null instead of accepting medical keywords
+  // Medical symptom descriptions alone shouldn't auto-trigger booking intent
   const lowerText = text.toLowerCase();
   
-  // Return the whole message if it contains medical keywords and isn't just temporal info
-  if (medicalKeywords.some((kw) => lowerText.includes(kw)) && !isTemporalOnlyText(text)) {
-    return text;
-  }
+  // Only accept if there's an explicit "reason:" marker
+  // This prevents symptoms from being misclassified as booking reasons
+  return null;
 
   return null;
 }
@@ -838,7 +878,7 @@ function extractIntentLocally({ message, history, userRole, userName }) {
   else if (/\b(cancel|remove|delete)\b/.test(lower) && /\bappointment\b/.test(lower)) intent = "cancel";
   else if (/\b(book|schedule|new appointment|make appointment)\b/.test(lower)) intent = "book";
   else if (/\bappointments?\b|\bschedule\b|\btoday\b|\btomorrow\b|\bupcoming\b|\bcompleted\b|\bpending\b/.test(lower)) intent = "list_appointments";
-  else if (/\bdoctor\b|\bspecialty\b|\bcardio|derma|neuro|pedia|ortho|gastro\b/.test(lower)) intent = "doctor_info";
+  else if (/\bdoctor\b|\bspecialty\b|\b(cardio|derma|neuro|pedia|ortho|gastro)\b/.test(lower)) intent = "doctor_info";
 
   const localReply =
     intent === "help"
@@ -868,10 +908,12 @@ function extractIntentLocally({ message, history, userRole, userName }) {
 
 async function extractIntentSmart({ message, history, userRole, userName, doctors, appointments }) {
   if (!geminiClient) {
+    console.log("📍 Using LOCAL fallback (Gemini not available)");
     return extractIntentLocally({ message, history, userRole, userName });
   }
 
   try {
+    console.log("🤖 Attempting Gemini extraction...");
     const extracted = await extractIntentWithGemini({
       message,
       history: history
@@ -891,7 +933,9 @@ async function extractIntentSmart({ message, history, userRole, userName, doctor
   } catch (error) {
     if (!geminiFallbackWarned) {
       geminiFallbackWarned = true;
-      console.warn("Gemini unavailable, using local fallback:", error?.message || error);
+      console.warn("⚠️  Gemini API error (falling back to local):", error?.message || error);
+    } else {
+      console.log("📍 Gemini error (using local fallback again)");
     }
     return extractIntentLocally({ message, history, userRole, userName });
   }
@@ -904,12 +948,13 @@ async function extractIntentWithGemini({ message, history, userRole, userName, d
     "Schema:",
     '{"intent":"chat|book|cancel|reschedule|availability_query|list_appointments|doctor_info|help|add_visit_summary|cancel_by_patient|reason_query|visit_summary_query","reply":"string","doctorQuery":"string|null","doctorId":"string|null","appointmentId":"string|null","appointmentDate":"YYYY-MM-DD|null","appointmentTime":"HH:MM|null","newAppointmentDate":"YYYY-MM-DD|null","newAppointmentTime":"HH:MM|null","reason":"string|null","notes":"string|null","visitSummary":"string|null","patientQuery":"string|null","clarification":"string|null"}',
     "Rules:",
-    "- intent=book when the user wants to schedule a new appointment.",
+    "- intent=book ONLY if user explicitly asks to book/schedule (e.g., 'book appointment', 'schedule with doctor', 'when can i see...', 'can i get an appointment').",
+    "- If user describes symptoms/health issues WITHOUT explicitly booking, set intent=doctor_info to recommend a specialist.",
     "- intent=cancel when the user wants to cancel an appointment.",
     "- intent=reschedule when the user wants to change an existing appointment.",
     "- intent=list_appointments when the user asks for their appointments.",
     "- intent=availability_query when the user asks for available slots/times for a doctor on a date.",
-    "- intent=doctor_info when the user asks for doctor suggestions or a doctor by specialty.",
+    "- intent=doctor_info when the user asks for doctor suggestions, describes symptoms, or asks by specialty.",
     "- intent=add_visit_summary when a doctor wants to add or update a visit summary for a completed appointment.",
     "- intent=cancel_by_patient when a doctor wants to cancel appointments for a specific patient name.",
     "- intent=reason_query when the user asks for the reason of one or more appointments, even with typos or vague phrasing.",
@@ -1029,6 +1074,8 @@ async function chatWithGemini(req, res) {
     });
 
     const intent = String(extracted.intent || "chat").toLowerCase();
+    console.log(`📊 [Intent] "${intent}" | Engine: "${extracted.engine || "unknown"}" | Message: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`);
+    
     const wantsVisitSummary = userRole === "doctor" && (intent === "add_visit_summary" || detectVisitSummaryIntent(message));
     const wantsCancelByPatient =
       userRole === "doctor" && (intent === "cancel_by_patient" || detectCancelByPatientIntent(message));
@@ -1528,6 +1575,12 @@ async function chatWithGemini(req, res) {
           : [];
 
       if (!candidateDoctors.length || (!doctorQuery && !extracted.doctorId)) {
+        // If NO doctors exist in system, provide helpful message
+        if (doctors.length === 0) {
+          return res.json({
+            reply: "Sorry, no doctors are currently available for booking. Please contact support or try again later."
+          });
+        }
         return res.json({
           reply: toPoliteClarification(
             extracted.clarification,
@@ -1625,7 +1678,7 @@ async function chatWithGemini(req, res) {
       }
 
       const apptAt = parseApptDate(appointmentDate, appointmentTime);
-      if (Number.isNaN(apptAt.getTime()) || apptAt.getTime() <= Date.now()) {
+      if (!apptAt || Number.isNaN(apptAt.getTime()) || apptAt.getTime() <= Date.now()) {
         return res.json({ reply: "Please choose a future date and time for the appointment." });
       }
 
@@ -1896,10 +1949,34 @@ async function chatWithGemini(req, res) {
   }
 }
 
+async function healthCheck(req, res) {
+  const status = {
+    geminiApiKey: !!process.env.GEMINI_API_KEY ? "✅ Configured" : "❌ Missing",
+    geminiClient: geminiClient ? "✅ Initialized" : "❌ Failed to initialize",
+  };
+
+  if (geminiClient) {
+    try {
+      const response = await geminiClient.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: "Say ok",
+      });
+      status.geminiTest = "✅ Working";
+      status.geminiModel = GEMINI_MODEL;
+    } catch (error) {
+      status.geminiTest = `❌ ${error?.message || "Unknown error"}`;
+      status.geminiModel = GEMINI_MODEL;
+    }
+  }
+
+  res.json(status);
+}
+
 module.exports = {
   suggestDoctors,
   getDoctorDetails,
   getAvailableSlots,
   getMyAppointments,
   chatWithGemini,
+  healthCheck,
 };
