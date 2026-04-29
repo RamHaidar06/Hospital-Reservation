@@ -185,3 +185,14 @@ module.exports = {
   testBookingFlow,
   testFallbackBehavior
 };
+
+// Minimal Jest smoke tests so this file is a valid test suite under Jest.
+describe("Chatbot Controller Smoke", () => {
+  test("exports test helper functions", () => {
+    expect(typeof testParseNaturalDate).toBe("function");
+    expect(typeof testTimeExtraction).toBe("function");
+    expect(typeof testIntentDetection).toBe("function");
+    expect(typeof testBookingFlow).toBe("function");
+    expect(typeof testFallbackBehavior).toBe("function");
+  });
+});

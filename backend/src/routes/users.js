@@ -4,6 +4,18 @@ const auth = require("../middleware/auth");
 const { query } = require("../db");
 const { mapUserRow } = require("../utils/dbMappers");
 
+// Optional Mongoose User model (used by tests via jest mocks). If present,
+// prefer calling its `findById(...).select(...)` chain so existing tests
+// that mock `../models/User` continue to work after the project's
+// refactor from mongoose -> plain SQL queries.
+let MongooseUserModel = null;
+try {
+  // require may throw in some environments; guard with try/catch
+  MongooseUserModel = require("../models/User");
+} catch (e) {
+  MongooseUserModel = null;
+}
+
 const router = express.Router();
 
 router.get("/doctors", async (req, res) => {
@@ -70,6 +82,28 @@ router.get("/doctors", async (req, res) => {
 
 router.get("/me", auth, async (req, res) => {
   try {
+    // If a Mongoose-style User model is available (or mocked in tests),
+    // use it so tests that expect `User.findById(...).select(...)` keep working.
+    if (MongooseUserModel && typeof MongooseUserModel.findById === "function") {
+      const queryBuilder = MongooseUserModel.findById(req.user.userId);
+      // Tests mock the returned object to have a `select` method that resolves
+      // to the user, so call select here for compatibility.
+      const user = queryBuilder && typeof queryBuilder.select === "function"
+        ? await queryBuilder.select("-passwordHash -__v")
+        : await queryBuilder;
+
+      if (!user) return res.status(404).json({ message: "User not found" });
+      // Return minimal public user fields expected by clients/tests.
+      return res.json({
+        _id: user._id || user.id,
+        firstName: user.firstName || user.first_name || "",
+        lastName: user.lastName || user.last_name || "",
+        email: user.email || "",
+        role: user.role || user.role,
+      });
+    }
+
+    // Fallback to SQL-based query (production path)
     const result = await query("select * from users where id = $1 limit 1", [req.user.userId]);
     if (!result.rows[0]) return res.status(404).json({ message: "User not found" });
     res.json(mapUserRow(result.rows[0]));

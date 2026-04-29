@@ -31,6 +31,9 @@ const SYMPTOM_SPECIALTY_MAP = {
   chest: "cardiology",
   heart: "cardiology",
   cardio: "cardiology",
+  "blood pressure": "cardiology",
+  hypertension: "cardiology",
+  bp: "cardiology",
   bone: "orthopedics",
   leg: "orthopedics",
   knee: "orthopedics",
@@ -52,6 +55,53 @@ function inferSpecialty(queryText = "") {
     if (q.includes(keyword)) return specialty;
   }
   return "";
+}
+
+function isSpecialtyExplanationQuery(text = "") {
+  const lower = String(text || "").toLowerCase();
+  return /\b(what does|what do|what is|tell me about|explain|describe|how does)\b/.test(lower);
+}
+
+function extractSpecialtyFromText(text = "") {
+  const lower = String(text || "").toLowerCase();
+  const specialties = ["cardiology", "dermatology", "neurology", "orthopedics", "gastroenterology", "pediatrics", "ophthalmology", "general medicine"];
+
+  for (const specialty of specialties) {
+    if (lower.includes(specialty)) return specialty;
+  }
+
+  return inferSpecialty(lower);
+}
+
+function formatSpecialtyAnswer(specialty) {
+  const info = {
+    cardiology: "Cardiology handles heart and blood pressure problems, such as chest pain, palpitations, and hypertension.",
+    dermatology: "Dermatology handles skin, hair, and nail conditions like rash, acne, and eczema.",
+    neurology: "Neurology handles brain, nerve, headache, and migraine-related problems.",
+    orthopedics: "Orthopedics handles bones, joints, muscles, and injuries.",
+    gastroenterology: "Gastroenterology handles stomach, digestion, liver, and bowel problems.",
+    pediatrics: "Pediatrics handles medical care for children and babies.",
+    ophthalmology: "Ophthalmology handles eye and vision problems.",
+    "general medicine": "General medicine handles general checkups and common non-emergency issues.",
+  };
+
+  return info[String(specialty || "").toLowerCase()] || "";
+}
+
+function hasMedicalConcern(text = "") {
+  const lower = String(text || "").toLowerCase();
+  const symptomPatterns = [
+    /\b(high blood pressure|blood pressure|hypertension|bp)\b/,
+    /\b(chest pain|heart pain|heart hurting|palpitations|cardio|heart)\b/,
+    /\b(headache|migraine|dizzy|dizziness|faint|fainting)\b/,
+    /\b(stomach|abdominal|nausea|vomit|vomiting|diarrhea|gastric|gastro)\b/,
+    /\b(rash|itch|itching|skin|acne|eczema)\b/,
+    /\b(fever|cough|cold|flu|sore throat|infection)\b/,
+    /\b(back pain|knee pain|joint pain|bone pain|injury|sprain|fracture)\b/,
+    /\b(eye pain|blurred vision|vision|ear pain)\b/,
+  ];
+
+  return symptomPatterns.some((pattern) => pattern.test(lower));
 }
 
 function rankDoctorsFallback(doctors, queryText = "") {
@@ -296,7 +346,11 @@ function isDateTodayOrFuture(isoDate) {
 function isGenericDoctorQuery(value) {
   const text = String(value || "").trim().toLowerCase();
   if (!text) return false;
-  return /\b(which|what|any|show|list)?\s*(doctor|doctors|dr|drs|doc|docs)\b/.test(text);
+
+  // Treat only broad asks like "doctor", "which doctor", "show doctors" as generic.
+  // Do not misclassify actual names like "dr hadi fakhouri".
+  return /^(which\s+)?(doctor|doctors|dr|drs|doc|docs)$/.test(text) ||
+    /^(show|list|any|what)\s+(doctor|doctors|dr|drs|doc|docs)$/.test(text);
 }
 
 function formatListAsSentence(items = []) {
@@ -818,7 +872,14 @@ function extractDoctorQueryFromMessage(message) {
 
   // Accept simple last-name style replies (e.g., "fakhouri"), but avoid common chat words.
   if (/^[a-zA-Z]{2,30}$/.test(text)) {
-    const blocked = new Set(["hello", "hi", "hey", "yo", "hola", "what", "which", "when", "where", "why", "doctor", "doctors", "dr", "drs", "doc", "docs", "help", "have", "available", "slots", "book", "booking", "appointment", "appointments"]);
+    const blocked = new Set([
+      "hello", "hi", "hey", "yo", "hola",
+      "what", "which", "when", "where", "why",
+      "doctor", "doctors", "dr", "drs", "doc", "docs",
+      "help", "have", "available", "slots", "book", "booking", "appointment", "appointments",
+      "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "correct", "right", "exactly",
+      "no", "nope", "nah", "maybe", "thanks", "thankyou", "thank", "please"
+    ]);
     if (!blocked.has(text.toLowerCase())) return text;
   }
 
@@ -879,6 +940,7 @@ function extractIntentLocally({ message, history, userRole, userName }) {
   else if (/\b(book|schedule|new appointment|make appointment)\b/.test(lower)) intent = "book";
   else if (/\bappointments?\b|\bschedule\b|\btoday\b|\btomorrow\b|\bupcoming\b|\bcompleted\b|\bpending\b/.test(lower)) intent = "list_appointments";
   else if (/\bdoctor\b|\bspecialty\b|\b(cardio|derma|neuro|pedia|ortho|gastro)\b/.test(lower)) intent = "doctor_info";
+  else if (hasMedicalConcern(text)) intent = "doctor_info";
 
   const localReply =
     intent === "help"
@@ -931,6 +993,33 @@ async function extractIntentSmart({ message, history, userRole, userName, doctor
       engine: "gemini",
     };
   } catch (error) {
+    const shouldRetry = Number(error?.status) !== 429;
+
+    if (shouldRetry) {
+      try {
+        console.log("🔁 Retrying Gemini extraction once...");
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const retry = await extractIntentWithGemini({
+          message,
+          history: history
+            .slice(-8)
+            .map((item) => `${item.role || item.type || "user"}: ${item.text || ""}`)
+            .join("\n"),
+          userRole,
+          userName,
+          doctors,
+          appointments,
+        });
+
+        return {
+          ...retry,
+          engine: "gemini",
+        };
+      } catch (retryError) {
+        error = retryError;
+      }
+    }
+
     if (!geminiFallbackWarned) {
       geminiFallbackWarned = true;
       console.warn("⚠️  Gemini API error (falling back to local):", error?.message || error);
@@ -1540,9 +1629,32 @@ async function chatWithGemini(req, res) {
 
     if (intent === "doctor_info") {
       const doctorQuery = extracted.doctorQuery || message;
-      const matches = await findDoctorCandidates(doctorQuery);
+
+      const specialty = extractSpecialtyFromText(doctorQuery);
+      const specialtyExplanation = isSpecialtyExplanationQuery(message) && specialty ? formatSpecialtyAnswer(specialty) : "";
+
+      if (specialtyExplanation) {
+        const matches = await findDoctorCandidates(specialty);
+        const doctorLines = matches
+          .slice(0, 5)
+          .map((doctor, index) => `${index + 1}. Dr. ${doctor.firstName} ${doctor.lastName} - ${doctor.specialty || "General Medicine"}`)
+          .join("\n");
+
+        return res.json({
+          reply: `${specialtyExplanation}\n\nHere are some doctors in ${specialty}:\n\n${doctorLines || "No matching doctors found."}`,
+        });
+      }
+
+      const searchQuery = specialty || doctorQuery;
+      const matches = await findDoctorCandidates(searchQuery);
 
       if (!matches.length) {
+        if (specialty) {
+          return res.json({
+            reply: `${formatSpecialtyAnswer(specialty)}\n\nI could not find a matching doctor right now. Could you please share the specialty or doctor name?`,
+          });
+        }
+
         return res.json({
           reply: toPoliteClarification(
             extracted.clarification,
@@ -1555,6 +1667,15 @@ async function chatWithGemini(req, res) {
         .slice(0, 5)
         .map((doctor, index) => `${index + 1}. ${doctor.firstName} ${doctor.lastName} - ${doctor.specialty || "General Medicine"}`)
         .join("\n");
+
+      if (specialty) {
+        const explanation = formatSpecialtyAnswer(specialty);
+        return res.json({
+          reply: explanation
+            ? `${explanation}\n\nHere are some matches:\n\n${reply}`
+            : `Here are some matches:\n\n${reply}`,
+        });
+      }
 
       return res.json({ reply: `Here are some matches:\n\n${reply}` });
     }
